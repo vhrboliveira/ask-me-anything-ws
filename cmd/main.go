@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,7 +17,8 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Default().Panic("error loading .env file: ", err)
+		slog.Error("unable to load .env file")
+		panic(err)
 	}
 
 	ctx := context.Background()
@@ -32,21 +33,24 @@ func main() {
 	)
 
 	if err != nil {
-		log.Default().Panic("error connecting to database: ", err)
+		slog.Error("error connecting to database.")
+		panic(err)
 	}
 
 	defer pool.Close()
 
 	if err := pool.Ping(ctx); err != nil {
-		log.Default().Panic("error pinging database: ", err)
+		slog.Error("error pinging database.")
+		panic(err)
 	}
 
 	handler := api.NewHandler(pgstore.New(pool))
 
 	go func() {
-		log.Default().Println("server running on port 5001")
+		slog.Info("server running on port 5001...")
 		if err := http.ListenAndServe(":5001", handler); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Default().Panic("error serving handler: ", err)
+			slog.Error("error serving handler.")
+			panic(err)
 		}
 	}()
 

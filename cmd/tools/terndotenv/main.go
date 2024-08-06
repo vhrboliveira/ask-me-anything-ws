@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os/exec"
 
 	"github.com/joho/godotenv"
@@ -9,7 +9,8 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Default().Panic("error loading .env file: ", err)
+		slog.Error("error loading .env file.")
+		panic(err)
 	}
 
 	cmd := exec.Command(
@@ -22,6 +23,7 @@ func main() {
 	)
 
 	if err := cmd.Run(); err != nil {
-		log.Default().Panic("error running migrations: ", err)
+		slog.Error("error running migrations")
+		panic(err)
 	}
 }
