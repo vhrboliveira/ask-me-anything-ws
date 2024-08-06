@@ -153,6 +153,22 @@ func (h apiHandler) createRoom(w http.ResponseWriter, r *http.Request) {
 
 	w.Write(data)
 }
+
+const (
+	MessageKindMessageCreated = "message_created"
+)
+
+type MessageCreated struct {
+	ID      string `json:"id"`
+	Message string `json:"message"`
+}
+
+type Message struct {
+	Kind   string `json:"kind"`
+	Value  any    `json:"value"`
+	RoomID string `json:"-"`
+}
+
 func (h apiHandler) notifyClient(msg Message) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
