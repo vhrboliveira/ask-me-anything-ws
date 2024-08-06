@@ -127,6 +127,32 @@ func (h apiHandler) subscribe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h apiHandler) createRoom(w http.ResponseWriter, r *http.Request) {
+	type _body struct {
+		Name string `json:"name"`
+	}
+
+	var body _body
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	roomID, err := h.q.InsertRoom(r.Context(), body.Name)
+	if err != nil {
+		slog.Error("error creating room", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	type response struct {
+		ID string `json:"id"`
+	}
+
+	data, _ := json.Marshal(response{ID: roomID.String()})
+	w.Header().Set("Content-Type", "application/json")
+
+	w.Write(data)
+}
 func (h apiHandler) notifyClient(msg Message) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
