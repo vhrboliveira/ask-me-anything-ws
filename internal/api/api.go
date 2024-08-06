@@ -236,6 +236,12 @@ func (h apiHandler) createRoomMessage(w http.ResponseWriter, r *http.Request) {
 	data, _ := json.Marshal(response{ID: messageID.String()})
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
+
+	go h.notifyClient(Message{
+		Kind:   MessageKindMessageCreated,
+		Value:  MessageCreated{ID: messageID.String(), Message: body.Message},
+		RoomID: rawRoomID,
+	})
 }
 
 func (h apiHandler) getRoomMessages(w http.ResponseWriter, r *http.Request)         {}
