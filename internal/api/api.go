@@ -127,7 +127,23 @@ func (h apiHandler) subscribe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h apiHandler) createRoom(w http.ResponseWriter, r *http.Request) {
+func (h apiHandler) notifyClient(msg Message) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
+	subscribers, ok := h.subscribers[msg.RoomID]
+	if !ok || len(subscribers) == 0 {
+		return
+	}
+
+	for conn, cancel := range subscribers {
+		if err := conn.WriteJSON(msg); err != nil {
+			slog.Error("failed to write message to client", "error", err)
+			cancel()
+		}
+	}
 }
+
 func (h apiHandler) getRooms(w http.ResponseWriter, r *http.Request) {}
 func (h apiHandler) createRoomMessage(w http.ResponseWriter, r *http.Request) {
 }
