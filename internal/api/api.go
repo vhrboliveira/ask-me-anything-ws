@@ -125,3 +125,15 @@ func (h apiHandler) subscribe(w http.ResponseWriter, r *http.Request) {
 	delete(h.subscribers[rawRoomID], c)
 	h.mutex.Unlock()
 }
+
+func (h apiHandler) createRoom(w http.ResponseWriter, r *http.Request) {
+}
+func (h apiHandler) getRooms(w http.ResponseWriter, r *http.Request) {}
+func (h apiHandler) createRoomMessage(w http.ResponseWriter, r *http.Request) {
+}
+
+func (h apiHandler) getRoomMessages(w http.ResponseWriter, r *http.Request)         {}
+func (h apiHandler) getRoomMessage(w http.ResponseWriter, r *http.Request)          {}
+func (h apiHandler) reactionToMessage(w http.ResponseWriter, r *http.Request)       {}
+func (h apiHandler) removeReactionToMessage(w http.ResponseWriter, r *http.Request) {}
+func (h apiHandler) answeredMessage(w http.ResponseWriter, r *http.Request)         {}
