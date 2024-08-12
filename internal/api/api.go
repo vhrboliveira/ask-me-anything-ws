@@ -263,7 +263,32 @@ func (h apiHandler) createRoomMessage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h apiHandler) getRoomMessages(w http.ResponseWriter, r *http.Request)         {}
+func (h apiHandler) getRoomMessages(w http.ResponseWriter, r *http.Request) {
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
+
+	if err != nil {
+		http.Error(w, "invalid room id", http.StatusBadRequest)
+		return
+	}
+
+	roomMessages, err := h.q.GetRoomMessages(r.Context(), roomID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "room messages not found", http.StatusBadRequest)
+			return
+		}
+
+		slog.Error("error getting room messages", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	data, _ := json.Marshal(roomMessages)
+	w.Header().Set("Content-Type", "application/json")
+
+	w.Write(data)
+}
 func (h apiHandler) getRoomMessage(w http.ResponseWriter, r *http.Request)          {}
 func (h apiHandler) reactionToMessage(w http.ResponseWriter, r *http.Request)       {}
 func (h apiHandler) removeReactionToMessage(w http.ResponseWriter, r *http.Request) {}
