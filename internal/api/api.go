@@ -186,7 +186,26 @@ func (h apiHandler) notifyClient(msg Message) {
 	}
 }
 
-func (h apiHandler) getRooms(w http.ResponseWriter, r *http.Request) {}
+func (h apiHandler) getRooms(w http.ResponseWriter, r *http.Request) {
+	rooms, err := h.q.GetRooms(r.Context())
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "no rooms found", http.StatusBadRequest)
+			return
+		}
+
+		slog.Error("error getting rooms list", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	data, _ := json.Marshal(rooms)
+	w.Header().Set("Content-Type", "application/json")
+
+	w.Write(data)
+}
+
 func (h apiHandler) createRoomMessage(w http.ResponseWriter, r *http.Request) {
 	rawRoomID := chi.URLParam(r, "room_id")
 	roomID, err := uuid.Parse(rawRoomID)
