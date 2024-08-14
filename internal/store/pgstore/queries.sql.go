@@ -20,12 +20,12 @@ WHERE id = $1
 `
 
 type GetMessageRow struct {
-	ID            uuid.UUID
-	RoomID        uuid.UUID
-	Message       string
-	ReactionCount int32
-	Answered      bool
-	CreatedAt     pgtype.Date
+	ID            uuid.UUID   `db:"id" json:"id"`
+	RoomID        uuid.UUID   `db:"room_id" json:"room_id"`
+	Message       string      `db:"message" json:"message"`
+	ReactionCount int32       `db:"reaction_count" json:"reaction_count"`
+	Answered      bool        `db:"answered" json:"answered"`
+	CreatedAt     pgtype.Date `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (GetMessageRow, error) {
@@ -50,8 +50,8 @@ WHERE id = $1
 `
 
 type GetRoomRow struct {
-	ID   uuid.UUID
-	Name string
+	ID   uuid.UUID `db:"id" json:"id"`
+	Name string    `db:"name" json:"name"`
 }
 
 func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (GetRoomRow, error) {
@@ -69,12 +69,12 @@ WHERE room_id = $1
 `
 
 type GetRoomMessagesRow struct {
-	ID            uuid.UUID
-	RoomID        uuid.UUID
-	Message       string
-	ReactionCount int32
-	Answered      bool
-	CreatedAt     pgtype.Date
+	ID            uuid.UUID   `db:"id" json:"id"`
+	RoomID        uuid.UUID   `db:"room_id" json:"room_id"`
+	Message       string      `db:"message" json:"message"`
+	ReactionCount int32       `db:"reaction_count" json:"reaction_count"`
+	Answered      bool        `db:"answered" json:"answered"`
+	CreatedAt     pgtype.Date `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetRoomMessagesRow, error) {
@@ -111,8 +111,8 @@ FROM rooms
 `
 
 type GetRoomsRow struct {
-	ID   uuid.UUID
-	Name string
+	ID   uuid.UUID `db:"id" json:"id"`
+	Name string    `db:"name" json:"name"`
 }
 
 func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
@@ -143,8 +143,8 @@ RETURNING "id"
 `
 
 type InsertMessageParams struct {
-	RoomID  uuid.UUID
-	Message string
+	RoomID  uuid.UUID `db:"room_id" json:"room_id"`
+	Message string    `db:"message" json:"message"`
 }
 
 func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (uuid.UUID, error) {

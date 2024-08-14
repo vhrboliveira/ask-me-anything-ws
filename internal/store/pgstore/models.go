@@ -10,18 +10,18 @@ import (
 )
 
 type Message struct {
-	ID            uuid.UUID
-	RoomID        uuid.UUID
-	Message       string
-	ReactionCount int32
-	Answered      bool
-	CreatedAt     pgtype.Date
-	UpdatedAt     pgtype.Date
+	ID            uuid.UUID   `db:"id" json:"id"`
+	RoomID        uuid.UUID   `db:"room_id" json:"room_id"`
+	Message       string      `db:"message" json:"message"`
+	ReactionCount int32       `db:"reaction_count" json:"reaction_count"`
+	Answered      bool        `db:"answered" json:"answered"`
+	CreatedAt     pgtype.Date `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Date `db:"updated_at" json:"updated_at"`
 }
 
 type Room struct {
-	ID        uuid.UUID
-	Name      string
-	CreatedAt pgtype.Date
-	UpdatedAt pgtype.Date
+	ID        uuid.UUID   `db:"id" json:"id"`
+	Name      string      `db:"name" json:"name"`
+	CreatedAt pgtype.Date `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Date `db:"updated_at" json:"updated_at"`
 }
