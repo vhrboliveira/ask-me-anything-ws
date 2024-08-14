@@ -33,7 +33,7 @@ func NewHandler(q *pgstore.Queries) http.Handler {
 	h := apiHandler{
 		q:           q,
 		r:           chi.NewRouter(),
-		upgrader:    websocket.Upgrader{},
+		upgrader:    websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
 		subscribers: make(map[string]map[*websocket.Conn]context.CancelFunc),
 		mutex:       &sync.RWMutex{},
 	}
