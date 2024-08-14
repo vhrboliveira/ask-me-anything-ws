@@ -67,9 +67,7 @@ func NewHandler(q *pgstore.Queries) http.Handler {
 				r.Route("/{message_id}", func(r chi.Router) {
 					r.Get("/", h.getRoomMessage)
 					r.Patch("/react", h.reactionToMessage)
-					r.Delete("/react", h.removeReactionToMessage)
-					r.Patch("/answer", h.answeredMessage)
-
+					r.Delete("/react", h.removeReactionFromMessage)
 				})
 			})
 		})
@@ -265,4 +263,104 @@ func (h apiHandler) getRoomMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendJSON(w, message)
+}
+
+func (h apiHandler) reactionToMessage(w http.ResponseWriter, r *http.Request) {
+	_, rawRoomID, _, ok := h.readRoom(w, r)
+	if !ok {
+		return
+	}
+
+	rawMessageID := chi.URLParam(r, "message_id")
+	messageID, err := uuid.Parse(rawMessageID)
+	if err != nil {
+		slog.Error("unable to parse message id", "error", err)
+		http.Error(w, "invalid message id", http.StatusBadRequest)
+		return
+	}
+
+	_, err = h.q.GetMessage(r.Context(), messageID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("message not found", "error", err)
+			http.Error(w, "message not found", http.StatusBadRequest)
+			return
+		}
+
+		slog.Error("unable to get message", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	count, err := h.q.ReactToMessage(r.Context(), messageID)
+	if err != nil {
+		slog.Error("unable to react to message", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	type response struct {
+		Count int32 `json:"count"`
+	}
+
+	sendJSON(w, response{Count: count})
+
+	go h.notifyClient(Message{
+		Kind:   MessageKindMessageReactionAdd,
+		RoomID: rawRoomID,
+		Value: MessageReactionAdded{
+			ID:    rawMessageID,
+			Count: count,
+		},
+	})
+}
+
+func (h apiHandler) removeReactionFromMessage(w http.ResponseWriter, r *http.Request) {
+	_, rawRoomID, _, ok := h.readRoom(w, r)
+	if !ok {
+		return
+	}
+
+	rawMessageID := chi.URLParam(r, "message_id")
+	messageID, err := uuid.Parse(rawMessageID)
+	if err != nil {
+		slog.Error("unable to parse message id", "error", err)
+		http.Error(w, "invalid message id", http.StatusBadRequest)
+		return
+	}
+
+	_, err = h.q.GetMessage(r.Context(), messageID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("message not found", "error", err)
+			http.Error(w, "message not found", http.StatusBadRequest)
+			return
+		}
+
+		slog.Error("unable to get message", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	count, err := h.q.RemoveReactionFromMessage(r.Context(), messageID)
+	if err != nil {
+		slog.Error("unable to react to message", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	type response struct {
+		Count int32 `json:"count"`
+	}
+
+	sendJSON(w, response{Count: count})
+
+	go h.notifyClient(Message{
+		Kind:   MessageKindMessageReactionRemoved,
+		RoomID: rawRoomID,
+		Value: MessageReactionRemoved{
+			ID:    rawMessageID,
+			Count: count,
+		},
+	})
 }
