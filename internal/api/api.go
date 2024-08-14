@@ -237,3 +237,32 @@ func (h apiHandler) getRoomMessages(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, roomMessages)
 }
 
+func (h apiHandler) getRoomMessage(w http.ResponseWriter, r *http.Request) {
+	_, _, _, ok := h.readRoom(w, r)
+	if !ok {
+		return
+	}
+
+	rawMessageID := chi.URLParam(r, "message_id")
+	messageID, err := uuid.Parse(rawMessageID)
+	if err != nil {
+		slog.Error("unable to parse message id", "error", err)
+		http.Error(w, "invalid message id", http.StatusBadRequest)
+		return
+	}
+
+	message, err := h.q.GetMessage(r.Context(), messageID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("message not found", "error", err)
+			http.Error(w, "message not found", http.StatusBadRequest)
+			return
+		}
+
+		slog.Error("unable to get message", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	sendJSON(w, message)
+}
