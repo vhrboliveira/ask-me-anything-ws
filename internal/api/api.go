@@ -68,6 +68,7 @@ func NewHandler(q *pgstore.Queries) http.Handler {
 					r.Get("/", h.getRoomMessage)
 					r.Patch("/react", h.reactionToMessage)
 					r.Delete("/react", h.removeReactionFromMessage)
+					r.Patch("/answer", h.setMessageToAnswered)
 				})
 			})
 		})
@@ -361,6 +362,51 @@ func (h apiHandler) removeReactionFromMessage(w http.ResponseWriter, r *http.Req
 		Value: MessageReactionRemoved{
 			ID:    rawMessageID,
 			Count: count,
+		},
+	})
+}
+
+func (h apiHandler) setMessageToAnswered(w http.ResponseWriter, r *http.Request) {
+	_, rawRoomID, _, ok := h.readRoom(w, r)
+	if !ok {
+		return
+	}
+
+	rawMessageID := chi.URLParam(r, "message_id")
+	messageID, err := uuid.Parse(rawMessageID)
+	if err != nil {
+		slog.Error("unable to parse message id", "error", err)
+		http.Error(w, "invalid message id", http.StatusBadRequest)
+		return
+	}
+
+	_, err = h.q.GetMessage(r.Context(), messageID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("message not found", "error", err)
+			http.Error(w, "message not found", http.StatusBadRequest)
+			return
+		}
+
+		slog.Error("unable to get message", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = h.q.MarkMessageAsAnswered(r.Context(), messageID)
+	if err != nil {
+		slog.Error("unable to react to message", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	go h.notifyClient(Message{
+		Kind:   MessageKindMessageAnswered,
+		RoomID: rawRoomID,
+		Value: MessageAnswered{
+			ID: rawMessageID,
 		},
 	})
 }
