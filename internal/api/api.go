@@ -79,28 +79,12 @@ func NewHandler(q *pgstore.Queries) http.Handler {
 }
 
 func (h apiHandler) subscribe(w http.ResponseWriter, r *http.Request) {
-	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
-
-	if err != nil {
-		http.Error(w, "invalid room id", http.StatusBadRequest)
-		return
-	}
-
-	_, err = h.q.GetRoom(r.Context(), roomID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "room not found", http.StatusBadRequest)
-			return
-		}
-
-		slog.Error("error getting room", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+	_, rawRoomID, _, ok := h.readRoom(w, r)
+	if !ok {
 		return
 	}
 
 	c, err := h.upgrader.Upgrade(w, r, nil)
-
 	if err != nil {
 		slog.Warn("failed to upgrade connection", "error", err)
 		http.Error(w, "failed to connect to ws connection", http.StatusBadRequest)
