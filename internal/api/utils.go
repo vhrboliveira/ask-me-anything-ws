@@ -1,3 +1,49 @@
+package api
+
+import (
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/vhrboliveira/ama-go-react/internal/store/pgstore"
+)
+
+const (
+	MessageKindMessageCreated         = "message_created"
+	MessageKindMessageReactionAdd     = "message_reaction_added"
+	MessageKindMessageReactionRemoved = "message_reaction_removed"
+	MessageKindMessageAnswered        = "message_answered"
+)
+
+type MessageCreated struct {
+	ID      string `json:"id"`
+	Message string `json:"message"`
+}
+
+type MessageReactionAdded struct {
+	ID    string `json:"id"`
+	Count int32  `json:"count"`
+}
+
+type MessageReactionRemoved struct {
+	ID    string `json:"id"`
+	Count int32  `json:"count"`
+}
+
+type MessageAnswered struct {
+	ID string `json:"id"`
+}
+
+type Message struct {
+	Kind   string `json:"kind"`
+	Value  any    `json:"value"`
+	RoomID string `json:"-"`
+}
+
 func (h apiHandler) readRoom(w http.ResponseWriter, r *http.Request) (room pgstore.GetRoomRow, rawRoomID string, roomId uuid.UUID, ok bool) {
 	rawRoomID = chi.URLParam(r, "room_id")
 	roomId, err := uuid.Parse(rawRoomID)
