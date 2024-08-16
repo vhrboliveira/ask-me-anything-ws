@@ -13,11 +13,12 @@ import (
 )
 
 type apiHandler struct {
-	q           *pgstore.Queries
-	r           *chi.Mux
-	upgrader    websocket.Upgrader
-	subscribers map[string]map[*websocket.Conn]context.CancelFunc
-	mutex       *sync.RWMutex
+	q                    *pgstore.Queries
+	r                    *chi.Mux
+	upgrader             websocket.Upgrader
+	roomSubscribers      map[string]map[*websocket.Conn]context.CancelFunc
+	roomsListSubscribers map[*websocket.Conn]context.CancelFunc
+	mutex                *sync.RWMutex
 }
 
 func (h apiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -26,11 +27,12 @@ func (h apiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func NewHandler(q *pgstore.Queries) http.Handler {
 	h := apiHandler{
-		q:           q,
-		r:           chi.NewRouter(),
-		upgrader:    websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
-		subscribers: make(map[string]map[*websocket.Conn]context.CancelFunc),
-		mutex:       &sync.RWMutex{},
+		q:                    q,
+		r:                    chi.NewRouter(),
+		upgrader:             websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
+		roomSubscribers:      make(map[string]map[*websocket.Conn]context.CancelFunc),
+		roomsListSubscribers: make(map[*websocket.Conn]context.CancelFunc),
+		mutex:                &sync.RWMutex{},
 	}
 
 	h.r.Use(middleware.RequestID, middleware.Recoverer, middleware.Logger)
@@ -48,7 +50,10 @@ func NewHandler(q *pgstore.Queries) http.Handler {
 		w.Write([]byte("OK"))
 	})
 
-	h.r.Get("/subscribe/{room_id}", h.subscribe)
+	h.r.Route("/subscribe", func(r chi.Router) {
+		r.Get("/", h.subscribeToRoomsList)
+		r.Get("/room/{room_id}", h.subscribeToRoom)
+	})
 
 	h.r.Route("/api", func(r chi.Router) {
 		r.Route("/rooms", func(r chi.Router) {

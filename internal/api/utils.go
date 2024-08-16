@@ -17,6 +17,7 @@ const (
 	MessageKindMessageReactionAdd     = "message_reaction_added"
 	MessageKindMessageReactionRemoved = "message_reaction_removed"
 	MessageKindMessageAnswered        = "message_answered"
+	MessageKindRoomCreated            = "room_created"
 )
 
 type MessageCreated struct {
@@ -42,6 +43,11 @@ type Message struct {
 	Kind   string `json:"kind"`
 	Value  any    `json:"value"`
 	RoomID string `json:"-"`
+}
+
+type RoomCreated struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func (h apiHandler) readRoom(w http.ResponseWriter, r *http.Request) (room pgstore.GetRoomRow, rawRoomID string, roomId uuid.UUID, ok bool) {

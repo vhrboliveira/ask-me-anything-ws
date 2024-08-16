@@ -35,6 +35,15 @@ func (h apiHandler) createRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendJSON(w, response{ID: roomID.String()})
+
+	go h.notifyRoomsListClients(Message{
+		Kind:   MessageKindRoomCreated,
+		RoomID: roomID.String(),
+		Value: RoomCreated{
+			ID:   roomID.String(),
+			Name: body.Name,
+		},
+	})
 }
 
 func (h apiHandler) getRooms(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +99,7 @@ func (h apiHandler) createRoomMessage(w http.ResponseWriter, r *http.Request) {
 
 	sendJSON(w, response{ID: messageID.String()})
 
-	go h.notifyClient(Message{
+	go h.notifyRoomClient(Message{
 		Kind:   MessageKindMessageCreated,
 		Value:  MessageCreated{ID: messageID.String(), Message: body.Message},
 		RoomID: rawRoomID,
@@ -192,7 +201,7 @@ func (h apiHandler) reactionToMessage(w http.ResponseWriter, r *http.Request) {
 
 	sendJSON(w, response{Count: count})
 
-	go h.notifyClient(Message{
+	go h.notifyRoomClient(Message{
 		Kind:   MessageKindMessageReactionAdd,
 		RoomID: rawRoomID,
 		Value: MessageReactionAdded{
@@ -242,7 +251,7 @@ func (h apiHandler) removeReactionFromMessage(w http.ResponseWriter, r *http.Req
 
 	sendJSON(w, response{Count: count})
 
-	go h.notifyClient(Message{
+	go h.notifyRoomClient(Message{
 		Kind:   MessageKindMessageReactionRemoved,
 		RoomID: rawRoomID,
 		Value: MessageReactionRemoved{
@@ -288,7 +297,7 @@ func (h apiHandler) setMessageToAnswered(w http.ResponseWriter, r *http.Request)
 
 	w.WriteHeader(http.StatusOK)
 
-	go h.notifyClient(Message{
+	go h.notifyRoomClient(Message{
 		Kind:   MessageKindMessageAnswered,
 		RoomID: rawRoomID,
 		Value: MessageAnswered{
