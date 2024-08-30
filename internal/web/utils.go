@@ -1,4 +1,4 @@
-package api
+package web
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/vhrboliveira/ama-go-react/internal/store/pgstore"
+	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
 
 const (
@@ -50,7 +50,7 @@ type RoomCreated struct {
 	Name string `json:"name"`
 }
 
-func (h apiHandler) readRoom(w http.ResponseWriter, r *http.Request) (room pgstore.GetRoomRow, rawRoomID string, roomId uuid.UUID, ok bool) {
+func (h Handlers) readRoom(w http.ResponseWriter, r *http.Request) (room pgstore.GetRoomRow, rawRoomID string, roomId uuid.UUID, ok bool) {
 	rawRoomID = chi.URLParam(r, "room_id")
 	roomId, err := uuid.Parse(rawRoomID)
 	if err != nil {
@@ -58,7 +58,7 @@ func (h apiHandler) readRoom(w http.ResponseWriter, r *http.Request) (room pgsto
 		return
 	}
 
-	room, err = h.q.GetRoom(r.Context(), roomId)
+	room, err = h.Queries.GetRoom(r.Context(), roomId)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.Error(w, "room not found", http.StatusBadRequest)
@@ -66,7 +66,7 @@ func (h apiHandler) readRoom(w http.ResponseWriter, r *http.Request) (room pgsto
 		}
 
 		slog.Error("error getting room", "room", roomId, "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		http.Error(w, "error getting room", http.StatusInternalServerError)
 		return pgstore.GetRoomRow{}, "", uuid.UUID{}, false
 	}
 

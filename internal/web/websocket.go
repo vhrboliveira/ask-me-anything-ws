@@ -1,4 +1,4 @@
-package api
+package web
 
 import (
 	"context"
@@ -8,15 +8,15 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func (h apiHandler) subscribeToRoom(w http.ResponseWriter, r *http.Request) {
+func (h Handlers) SubscribeToRoom(w http.ResponseWriter, r *http.Request) {
 	_, rawRoomID, _, ok := h.readRoom(w, r)
 	if !ok {
 		return
 	}
 
-	c, err := h.upgrader.Upgrade(w, r, nil)
+	c, err := h.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		slog.Warn("failed to upgrade connection", "error", err)
+		slog.Error("failed to upgrade connection", "error", err)
 		http.Error(w, "failed to connect to ws connection", http.StatusBadRequest)
 		return
 	}
@@ -25,23 +25,23 @@ func (h apiHandler) subscribeToRoom(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 
-	h.mutex.Lock()
-	if _, ok := h.roomSubscribers[rawRoomID]; !ok {
-		h.roomSubscribers[rawRoomID] = make(map[*websocket.Conn]context.CancelFunc)
+	h.Mutex.Lock()
+	if _, ok := h.RoomSubscribers[rawRoomID]; !ok {
+		h.RoomSubscribers[rawRoomID] = make(map[*websocket.Conn]context.CancelFunc)
 	}
 	slog.Info("new client connected", "room_id", rawRoomID, "client_IP", r.RemoteAddr)
-	h.roomSubscribers[rawRoomID][c] = cancel
-	h.mutex.Unlock()
+	h.RoomSubscribers[rawRoomID][c] = cancel
+	h.Mutex.Unlock()
 
 	<-ctx.Done()
 
-	h.mutex.Lock()
-	delete(h.roomSubscribers[rawRoomID], c)
-	h.mutex.Unlock()
+	h.Mutex.Lock()
+	delete(h.RoomSubscribers[rawRoomID], c)
+	h.Mutex.Unlock()
 }
 
-func (h apiHandler) subscribeToRoomsList(w http.ResponseWriter, r *http.Request) {
-	c, err := h.upgrader.Upgrade(w, r, nil)
+func (h Handlers) SubscribeToRoomsList(w http.ResponseWriter, r *http.Request) {
+	c, err := h.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Warn("failed to upgrade connection", "error", err)
 		http.Error(w, "failed to connect to ws connection", http.StatusBadRequest)
@@ -52,23 +52,23 @@ func (h apiHandler) subscribeToRoomsList(w http.ResponseWriter, r *http.Request)
 
 	ctx, cancel := context.WithCancel(r.Context())
 
-	h.mutex.Lock()
+	h.Mutex.Lock()
 	slog.Info("new client connected to rooms list", "client_IP", r.RemoteAddr)
-	h.roomsListSubscribers[c] = cancel
-	h.mutex.Unlock()
+	h.RoomsListSubscribers[c] = cancel
+	h.Mutex.Unlock()
 
 	<-ctx.Done()
 
-	h.mutex.Lock()
-	delete(h.roomsListSubscribers, c)
-	h.mutex.Unlock()
+	h.Mutex.Lock()
+	delete(h.RoomsListSubscribers, c)
+	h.Mutex.Unlock()
 }
 
-func (h apiHandler) notifyRoomClient(msg Message) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
+func (h Handlers) NotifyRoomClient(msg Message) {
+	h.Mutex.Lock()
+	defer h.Mutex.Unlock()
 
-	subscribers, ok := h.roomSubscribers[msg.RoomID]
+	subscribers, ok := h.RoomSubscribers[msg.RoomID]
 	if !ok || len(subscribers) == 0 {
 		return
 	}
@@ -81,11 +81,11 @@ func (h apiHandler) notifyRoomClient(msg Message) {
 	}
 }
 
-func (h apiHandler) notifyRoomsListClients(msg Message) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
+func (h Handlers) NotifyRoomsListClients(msg Message) {
+	h.Mutex.Lock()
+	defer h.Mutex.Unlock()
 
-	for conn, cancel := range h.roomsListSubscribers {
+	for conn, cancel := range h.RoomsListSubscribers {
 		if err := conn.WriteJSON(msg); err != nil {
 			slog.Error("failed to write room list message to client", "error", err)
 			cancel()
