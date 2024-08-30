@@ -15,6 +15,4 @@ COPY . .
 
 EXPOSE 5001
 
-# ENTRYPOINT [ "sh", "-c", "chmod +x /app/tmp && air" ]
-
 CMD ["air"]
