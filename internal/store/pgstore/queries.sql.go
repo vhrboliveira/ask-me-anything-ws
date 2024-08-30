@@ -203,7 +203,7 @@ UPDATE messages
 SET
   reaction_count = reaction_count - 1
 WHERE
-  id = $1
+  id = $1 AND reaction_count > 0
 RETURNING reaction_count
 `
 
