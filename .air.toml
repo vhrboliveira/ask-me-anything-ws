@@ -1,0 +1,27 @@
+# Config file for air - live reload for Go applications
+
+# Working directory
+root = "."
+tmp_dir = "tmp"
+
+# Watching files with the given extensions
+[build]
+cmd = "go build -o ./tmp/main ./cmd/ama"
+delay = 200
+include_ext = ["go", "tpl", "tmpl", "html"]
+exclude_dir = ["vendor", "tmp", "build", ".git", "deploy"]
+
+# Use go modules
+mod = "on"
+
+# Air command
+[runner]
+cmd = "./tmp/main"
+output_color = "true"
+sig = "true"
+watch_dir = ["../"]
+exclude = ["tmp", "vendor", "node_modules", ".git", "deploy"]
+
+# Log settings
+[log]
+level = "debug"
