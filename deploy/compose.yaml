@@ -1,0 +1,36 @@
+services:
+  ama-go:
+    image: ama-go-local
+    command: air # Air entrypoint
+    restart: unless-stopped
+    build:
+      context: ..
+      dockerfile: ./build/docker/local.Dockerfile
+    ports:
+      - 5001:5001
+    env_file:
+      - ../.env
+    depends_on:
+      - ama-db
+    volumes:
+      - ..:/app
+      - /app/tmp # Air needs a temporary directory
+      - ../.env:/app/.env
+  ama-db:
+    container_name: ama-db
+    image: postgres:alpine
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      - ${DB_PORT:-5432}:5432
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - ama-db:/var/lib/postgresql/data
+
+volumes:
+  ama-db:
+    driver: local

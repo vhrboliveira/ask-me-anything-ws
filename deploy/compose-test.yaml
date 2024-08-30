@@ -1,0 +1,9 @@
+services:
+  ama-db-test:
+    image: postgres:alpine
+    ports:
+      - ${DB_PORT:-5433}:5432
+    environment:
+      POSTGRES_USER: ${DB_USER:-testuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-testpassword}
+      POSTGRES_DB: ${DB_NAME:-testdb}
