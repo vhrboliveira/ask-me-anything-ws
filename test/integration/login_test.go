@@ -19,7 +19,7 @@ func TestLogin(t *testing.T) {
 
 	insertUser := func(t testing.TB, user pgstore.CreateUserParams) string {
 		userPayload := strings.NewReader(`{ "email": "` + user.Email + `", "name": "` + user.Name + `", "password": "` + user.PasswordHash + `" }`)
-		rr := execRequest(method, "/user", userPayload)
+		rr := execRequest(method, "/users", userPayload)
 		response := rr.Result()
 		defer response.Body.Close()
 

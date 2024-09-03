@@ -12,7 +12,7 @@ import (
 
 func TestCreateUser(t *testing.T) {
 	const (
-		baseURL = "/user"
+		baseURL = "/users"
 		method  = http.MethodPost
 	)
 

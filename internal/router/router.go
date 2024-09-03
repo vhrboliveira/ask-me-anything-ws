@@ -32,6 +32,7 @@ func SetupRouter(h *web.Handlers) *chi.Mux {
 	})
 
 	router.Post("/login", h.Login)
+	router.Post("/users", h.CreateUser)
 
 	router.Route("/subscribe", func(router chi.Router) {
 		router.Use(auth.WebsocketAuthenticator)
