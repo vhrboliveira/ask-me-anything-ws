@@ -2,10 +2,13 @@ package router
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/jwtauth/v5"
+	"github.com/vhrboliveira/ama-go/internal/auth"
 	"github.com/vhrboliveira/ama-go/internal/web"
 )
 
@@ -31,29 +34,34 @@ func SetupRouter(h *web.Handlers) *chi.Mux {
 	router.Post("/login", h.Login)
 	router.Post("/user", h.CreateUser)
 
-	router.Route("/subscribe", func(router chi.Router) {
-		router.Get("/", h.SubscribeToRoomsList)
-		router.Get("/room/{room_id}", h.SubscribeToRoom)
-	})
+	// Protected routes
+	router.Group(func(router chi.Router) {
+		router.Use(jwtauth.Verifier(auth.TokenAuth))
+		router.Use(auth.Authenticator)
 
-	router.Route("/api", func(router chi.Router) {
-		router.Route("/rooms", func(router chi.Router) {
-			router.Post("/", h.CreateRoom)
-			router.Get("/", h.GetRooms)
+		router.Route("/subscribe", func(router chi.Router) {
+			router.Get("/", h.SubscribeToRoomsList)
+			router.Get("/room/{room_id}", h.SubscribeToRoom)
+		})
 
-			router.Route("/{room_id}/messages", func(router chi.Router) {
-				router.Post("/", h.CreateRoomMessage)
-				router.Get("/", h.GetRoomMessages)
+		router.Route("/api", func(router chi.Router) {
+			router.Route("/rooms", func(router chi.Router) {
+				router.Post("/", h.CreateRoom)
+				router.Get("/", h.GetRooms)
 
-				router.Route("/{message_id}", func(router chi.Router) {
-					router.Get("/", h.GetRoomMessage)
-					router.Patch("/react", h.ReactionToMessage)
-					router.Delete("/react", h.RemoveReactionFromMessage)
-					router.Patch("/answer", h.SetMessageToAnswered)
+				router.Route("/{room_id}/messages", func(router chi.Router) {
+					router.Post("/", h.CreateRoomMessage)
+					router.Get("/", h.GetRoomMessages)
+
+					router.Route("/{message_id}", func(router chi.Router) {
+						router.Get("/", h.GetRoomMessage)
+						router.Patch("/react", h.ReactionToMessage)
+						router.Delete("/react", h.RemoveReactionFromMessage)
+						router.Patch("/answer", h.SetMessageToAnswered)
+					})
 				})
 			})
 		})
 	})
-
 	return router
 }
