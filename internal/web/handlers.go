@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/go-chi/chi/v5"
@@ -13,7 +14,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/vhrboliveira/ama-go/internal/auth"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Handlers struct {
@@ -23,6 +27,13 @@ type Handlers struct {
 	RoomSubscribers      map[string]map[*websocket.Conn]context.CancelFunc
 	RoomsListSubscribers map[*websocket.Conn]context.CancelFunc
 	Mutex                *sync.RWMutex
+}
+
+type User struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+	Bio   string `json:"bio"`
 }
 
 func NewHandler(q *pgstore.Queries) *Handlers {
@@ -349,5 +360,152 @@ func (h Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) {
 		Value: MessageAnswered{
 			ID: rawMessageID,
 		},
+	})
+}
+
+func (h Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
+	type requestBody struct {
+		Email    string `json:"email" validate:"required,email"`
+		Password string `json:"password" validate:"required,min=12"`
+		Name     string `json:"name" validate:"required"`
+		Bio      string `json:"bio"`
+	}
+
+	var body requestBody
+	validate := validator.New()
+
+	err := json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		slog.Error("failed to decode body", "error", err)
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	if err := validate.Struct(&body); err != nil {
+		slog.Error("validation failed", "error", err)
+
+		missingFields := []string{}
+		for _, err := range err.(validator.ValidationErrors) {
+			if err.Tag() == "required" {
+				missingFields = append(missingFields, err.Field())
+			}
+
+			if err.Tag() == "email" && err.Field() == "Email" {
+				http.Error(w, "validation failed: Email must be a valid email address", http.StatusBadRequest)
+				return
+			}
+
+			if err.Tag() == "min" && err.Field() == "Password" {
+				http.Error(w, "validation failed: Password must be at least 12 characters", http.StatusBadRequest)
+				return
+			}
+		}
+
+		http.Error(w, "validation failed, missing required field(s): "+strings.Join(missingFields, ", "), http.StatusBadRequest)
+		return
+	}
+
+	bytePassword := []byte(body.Password)
+	hashedPassword, err := bcrypt.GenerateFromPassword(bytePassword, bcrypt.DefaultCost)
+	if err != nil {
+		slog.Error("failed to hash password", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	userID, err := h.Queries.CreateUser(r.Context(), pgstore.CreateUserParams{
+		Email:        body.Email,
+		PasswordHash: string(hashedPassword),
+		Name:         body.Name,
+		Bio:          body.Bio,
+	})
+	if err != nil {
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			slog.Error("user already exists", "error", err)
+			http.Error(w, "user already exists", http.StatusBadRequest)
+			return
+		}
+		slog.Error("error creating user", "error", err)
+		http.Error(w, "error creating user", http.StatusInternalServerError)
+		return
+	}
+
+	type response struct {
+		ID string `json:"id"`
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	sendJSON(w, response{ID: userID.String()})
+}
+
+func (h Handlers) Login(w http.ResponseWriter, r *http.Request) {
+	type requestBody struct {
+		Email    string `json:"email" validate:"required,email"`
+		Password string `json:"password" validate:"required"`
+	}
+
+	var body requestBody
+	validate := validator.New()
+
+	err := json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		slog.Error("failed to decode body", "error", err)
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	if err := validate.Struct(&body); err != nil {
+		slog.Error("validation failed", "error", err)
+
+		missingFields := []string{}
+		for _, err := range err.(validator.ValidationErrors) {
+			if err.Tag() == "required" {
+				missingFields = append(missingFields, err.Field())
+			}
+
+			if err.Tag() == "email" && err.Field() == "Email" {
+				http.Error(w, "validation failed: Email must be a valid email address", http.StatusBadRequest)
+				return
+			}
+		}
+
+		http.Error(w, "validation failed, missing required field(s): "+strings.Join(missingFields, ", "), http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.Queries.GetUserByEmail(r.Context(), body.Email)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("user not found", "error", err)
+			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			return
+		}
+		slog.Error("error getting user", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(body.Password))
+	if err != nil {
+		slog.Error("invalid password", "error", err)
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	token, err := auth.GenerateJWT(user.ID, user.Email)
+	if err != nil {
+		slog.Error("failed to generate token", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	type response struct {
+		ID    string `json:"id"`
+		Token string `json:"token"`
+	}
+
+	sendJSON(w, response{
+		ID:    user.ID.String(),
+		Token: token,
 	})
 }

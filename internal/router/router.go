@@ -12,6 +12,8 @@ import (
 func SetupRouter(h *web.Handlers) *chi.Mux {
 	router := chi.NewRouter()
 
+	auth.InitJWT(os.Getenv("JWT_SECRET"))
+
 	router.Use(middleware.RequestID, middleware.Recoverer, middleware.Logger)
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"https://*", "http://*"},
@@ -25,6 +27,9 @@ func SetupRouter(h *web.Handlers) *chi.Mux {
 	router.Get("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
+
+	router.Post("/login", h.Login)
+	router.Post("/user", h.CreateUser)
 
 	router.Route("/subscribe", func(router chi.Router) {
 		router.Get("/", h.SubscribeToRoomsList)
