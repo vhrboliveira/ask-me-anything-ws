@@ -9,11 +9,49 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/vhrboliveira/ama-go/internal/auth"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
 
+func getAuthToken() string {
+	token, err := auth.GenerateJWT(uuid.New(), "test@test.com")
+	if err != nil {
+		panic(err)
+	}
+
+	return token
+}
+
 func execRequest(method, url string, body io.Reader) *httptest.ResponseRecorder {
+	token := "Bearer " + getAuthToken()
+
 	r := httptest.NewRequest(method, url, body)
+	r.Header.Set("Authorization", token)
+
+	rr := httptest.NewRecorder()
+
+	Router.ServeHTTP(rr, r)
+
+	return rr
+}
+
+func execRequestWithoutAuth(method, url string, body io.Reader) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(method, url, body)
+
+	rr := httptest.NewRecorder()
+
+	Router.ServeHTTP(rr, r)
+
+	return rr
+}
+
+func execRequestWithInvalidAuth(method, url string, body io.Reader) *httptest.ResponseRecorder {
+	token := "Bearer " + getAuthToken()
+	token = token[:len(token)-1]
+
+	r := httptest.NewRequest(method, url, body)
+	r.Header.Set("Authorization", token)
+
 	rr := httptest.NewRecorder()
 
 	Router.ServeHTTP(rr, r)
@@ -58,6 +96,7 @@ func truncateTables(t testing.TB) {
 	query := `
 		TRUNCATE TABLE rooms RESTART IDENTITY CASCADE;
 		TRUNCATE TABLE messages RESTART IDENTITY CASCADE;
+		TRUNCATE TABLE users RESTART IDENTITY CASCADE;
 		`
 	_, err := DBPool.Exec(context.Background(), query)
 
@@ -341,5 +380,37 @@ func setAnswerMessageConstraintFailure(t testing.TB, roomID uuid.UUID) {
 	_, err = DBPool.Exec(ctx, "UPDATE messages SET answered = true")
 	if err != nil {
 		t.Fatalf("Failed to update constraint message: %v", err)
+	}
+}
+
+func createUser(t testing.TB, email, password, name string) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	user := pgstore.CreateUserParams{
+		Email:        email,
+		PasswordHash: password,
+		Name:         name,
+	}
+
+	DBPool.Exec(ctx, "INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3)", user.Email, user.PasswordHash, user.Name)
+}
+
+func setCreateUserConstraintError(t testing.TB) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	t.Cleanup(func() {
+		_, err := DBPool.Exec(ctx, "ALTER TABLE users2 RENAME TO users;")
+		if err != nil {
+			t.Fatalf("Failed to remove constraint: %v", err)
+		}
+	})
+
+	_, err := DBPool.Exec(ctx, "ALTER TABLE users RENAME TO users2;")
+	if err != nil {
+		t.Fatalf("Failed to set constraint: %v", err)
 	}
 }

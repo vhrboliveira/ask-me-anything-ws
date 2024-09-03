@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
+	"github.com/vhrboliveira/ama-go/internal/auth"
 	"github.com/vhrboliveira/ama-go/internal/router"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 	"github.com/vhrboliveira/ama-go/internal/web"
@@ -41,6 +42,8 @@ func setup() {
 	if err = godotenv.Load(".env.test"); err != nil {
 		panic("Error loading .env.test file")
 	}
+
+	auth.InitJWT(os.Getenv("JWT_SECRET"))
 
 	// Start Docker Compose
 	if err = exec.Command(
