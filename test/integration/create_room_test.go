@@ -52,7 +52,9 @@ func TestCreateRoom(t *testing.T) {
 		defer server.Close()
 
 		wsURL := "ws" + server.URL[4:] + "/subscribe"
-		ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		headers := http.Header{}
+		headers.Add("Authorization", "Bearer "+getAuthToken())
+		ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
 		if err != nil {
 			t.Fatalf("failed to connect to websocket: %v", err)
 		}
@@ -101,6 +103,40 @@ func TestCreateRoom(t *testing.T) {
 		assertResponse(t, receivedMessage.Kind, web.MessageKindRoomCreated)
 		assertResponse(t, roomCreated.ID, result.ID)
 		assertResponse(t, roomCreated.Name, want)
+	})
+
+	t.Run("returns token not found error if token is not found", func(t *testing.T) {
+		t.Cleanup(func() {
+			truncateTables(t)
+		})
+
+		rr := execRequestWithoutAuth(http.MethodPost, url, nil)
+		response := rr.Result()
+		defer response.Body.Close()
+
+		assertStatusCode(t, response, http.StatusUnauthorized)
+
+		body := parseResponseBody(t, response)
+
+		want := "no token found\n"
+		assertResponse(t, want, string(body))
+	})
+
+	t.Run("returns authentication error if token is invalid", func(t *testing.T) {
+		t.Cleanup(func() {
+			truncateTables(t)
+		})
+
+		rr := execRequestWithInvalidAuth(http.MethodPost, url, nil)
+		response := rr.Result()
+		defer response.Body.Close()
+
+		assertStatusCode(t, response, http.StatusUnauthorized)
+
+		body := parseResponseBody(t, response)
+
+		want := "token is unauthorized\n"
+		assertResponse(t, want, string(body))
 	})
 
 	t.Run("returns an error if request body is invalid", func(t *testing.T) {

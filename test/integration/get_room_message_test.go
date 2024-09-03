@@ -68,6 +68,44 @@ func TestGetRoomMessages(t *testing.T) {
 		}
 	})
 
+	t.Run("returns token not found error if token is not found", func(t *testing.T) {
+		t.Cleanup(func() {
+			truncateTables(t)
+		})
+
+		fakeID := uuid.New().String()
+		newURL := baseURL + fakeID + "/messages"
+		rr := execRequestWithoutAuth(method, newURL, nil)
+		response := rr.Result()
+		defer response.Body.Close()
+
+		assertStatusCode(t, response, http.StatusUnauthorized)
+
+		body := parseResponseBody(t, response)
+
+		want := "no token found\n"
+		assertResponse(t, want, string(body))
+	})
+
+	t.Run("returns authentication error if token is invalid", func(t *testing.T) {
+		t.Cleanup(func() {
+			truncateTables(t)
+		})
+
+		fakeID := uuid.New().String()
+		newURL := baseURL + fakeID + "/messages"
+		rr := execRequestWithInvalidAuth(method, newURL, nil)
+		response := rr.Result()
+		defer response.Body.Close()
+
+		assertStatusCode(t, response, http.StatusUnauthorized)
+
+		body := parseResponseBody(t, response)
+
+		want := "token is unauthorized\n"
+		assertResponse(t, want, string(body))
+	})
+
 	t.Run("returns an error if room id is not valid", func(t *testing.T) {
 		t.Cleanup(func() {
 			truncateTables(t)
