@@ -12,6 +12,10 @@ import (
 
 var TokenAuth *jwtauth.JWTAuth
 
+type contextKey string
+
+const tokenKey contextKey = "token"
+
 func InitJWT(jwtSecret string) {
 	TokenAuth = jwtauth.New("HS256", []byte(jwtSecret), nil)
 }
@@ -46,6 +50,19 @@ func Authenticator(next http.Handler) http.Handler {
 			return
 		}
 
+		next.ServeHTTP(w, r)
+	})
+}
+
+func WebsocketAuthenticator(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			http.Error(w, "no token found", http.StatusUnauthorized)
+			return
+		}
+
+		r.Header.Set("Authorization", "Bearer "+token)
 		next.ServeHTTP(w, r)
 	})
 }

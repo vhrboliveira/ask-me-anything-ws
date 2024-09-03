@@ -32,17 +32,20 @@ func SetupRouter(h *web.Handlers) *chi.Mux {
 	})
 
 	router.Post("/login", h.Login)
-	router.Post("/user", h.CreateUser)
+
+	router.Route("/subscribe", func(router chi.Router) {
+		router.Use(auth.WebsocketAuthenticator)
+		router.Use(jwtauth.Verifier(auth.TokenAuth))
+		router.Use(auth.Authenticator)
+
+		router.Get("/", h.SubscribeToRoomsList)
+		router.Get("/room/{room_id}", h.SubscribeToRoom)
+	})
 
 	// Protected routes
 	router.Group(func(router chi.Router) {
 		router.Use(jwtauth.Verifier(auth.TokenAuth))
 		router.Use(auth.Authenticator)
-
-		router.Route("/subscribe", func(router chi.Router) {
-			router.Get("/", h.SubscribeToRoomsList)
-			router.Get("/room/{room_id}", h.SubscribeToRoom)
-		})
 
 		router.Route("/api", func(router chi.Router) {
 			router.Route("/rooms", func(router chi.Router) {
