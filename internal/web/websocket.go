@@ -64,7 +64,7 @@ func (h Handlers) SubscribeToRoomsList(w http.ResponseWriter, r *http.Request) {
 	h.Mutex.Unlock()
 }
 
-func (h Handlers) NotifyRoomClient(msg Message) {
+func (h Handlers) notifyRoomClient(msg Message) {
 	h.Mutex.Lock()
 	defer h.Mutex.Unlock()
 
@@ -81,7 +81,7 @@ func (h Handlers) NotifyRoomClient(msg Message) {
 	}
 }
 
-func (h Handlers) NotifyRoomsListClients(msg Message) {
+func (h Handlers) notifyRoomsListClients(msg Message) {
 	h.Mutex.Lock()
 	defer h.Mutex.Unlock()
 
