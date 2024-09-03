@@ -15,10 +15,8 @@ func TestSubscribeToRoom(t *testing.T) {
 		defer server.Close()
 
 		room := createAndGetRoom(t)
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String()
-		headers := http.Header{}
-		headers.Add("Authorization", "Bearer "+getAuthToken())
-		ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + getAuthToken()
+		ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		if err != nil {
 			t.Fatalf("failed to connect to websocket: %v", err)
 		}
@@ -48,11 +46,10 @@ func TestSubscribeToRoom(t *testing.T) {
 		defer server.Close()
 
 		fakeID := uuid.New().String()
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + fakeID
 		token := getAuthToken()
 		invalidToken := token[:len(token)-1]
-		headers := http.Header{"Authorization": {"Bearer " + invalidToken}}
-		_, res, err := websocket.DefaultDialer.Dial(wsURL, headers)
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + fakeID + "?token=" + invalidToken
+		_, res, err := websocket.DefaultDialer.Dial(wsURL, nil)
 
 		assertStatusCode(t, res, http.StatusUnauthorized)
 
@@ -70,10 +67,8 @@ func TestSubscribeToRoom(t *testing.T) {
 		defer server.Close()
 
 		// Connect to WebSocket
-		wsURL := "ws" + server.URL[4:] + "/subscribe"
-		headers := http.Header{}
-		headers.Add("Authorization", "Bearer "+getAuthToken())
-		ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
+		wsURL := "ws" + server.URL[4:] + "/subscribe?token=" + getAuthToken()
+		ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		if err != nil {
 			t.Fatalf("failed to connect to websocket: %v", err)
 		}
@@ -101,11 +96,10 @@ func TestSubscribeToRoom(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe"
 		token := getAuthToken()
 		invalidToken := token[:len(token)-1]
-		headers := http.Header{"Authorization": {"Bearer " + invalidToken}}
-		_, res, err := websocket.DefaultDialer.Dial(wsURL, headers)
+		wsURL := "ws" + server.URL[4:] + "/subscribe?token=" + invalidToken
+		_, res, err := websocket.DefaultDialer.Dial(wsURL, nil)
 
 		assertStatusCode(t, res, http.StatusUnauthorized)
 

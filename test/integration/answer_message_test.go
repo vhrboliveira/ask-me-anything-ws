@@ -40,7 +40,7 @@ func TestAnswerMessage(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String()
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + getAuthToken()
 		headers := http.Header{}
 		headers.Add("Authorization", "Bearer "+getAuthToken())
 		ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
