@@ -6,7 +6,12 @@ import (
 )
 
 func TestHealthcheck(t *testing.T) {
-	rr := execRequest("GET", "http://localhost:5001/healthcheck", nil)
+	const (
+		url    = "/healthcheck"
+		method = http.MethodGet
+	)
+
+	rr := execRequest(method, url, nil)
 
 	response := rr.Result()
 	defer response.Body.Close()
