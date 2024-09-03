@@ -29,13 +29,6 @@ type Handlers struct {
 	Mutex                *sync.RWMutex
 }
 
-type User struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-	Name  string `json:"name"`
-	Bio   string `json:"bio"`
-}
-
 func NewHandler(q *pgstore.Queries) *Handlers {
 	return &Handlers{
 		Queries:              q,
@@ -47,11 +40,11 @@ func NewHandler(q *pgstore.Queries) *Handlers {
 	}
 }
 
-func (h Handlers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Router.ServeHTTP(w, r)
 }
 
-func (h Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	type requestBody struct {
 		Name string `json:"name" validate:"required"`
 	}
@@ -113,7 +106,7 @@ func (h *Handlers) GetRooms(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, rooms)
 }
 
-func (h Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
 	_, rawRoomID, roomID, ok := h.readRoom(w, r)
 	if !ok {
 		return
@@ -164,7 +157,7 @@ func (h Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h Handlers) GetRoomMessages(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetRoomMessages(w http.ResponseWriter, r *http.Request) {
 	_, _, roomID, ok := h.readRoom(w, r)
 	if !ok {
 		return
@@ -184,7 +177,7 @@ func (h Handlers) GetRoomMessages(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, roomMessages)
 }
 
-func (h Handlers) GetRoomMessage(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetRoomMessage(w http.ResponseWriter, r *http.Request) {
 	_, _, _, ok := h.readRoom(w, r)
 	if !ok {
 		return
@@ -214,7 +207,7 @@ func (h Handlers) GetRoomMessage(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, message)
 }
 
-func (h Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
 	_, rawRoomID, _, ok := h.readRoom(w, r)
 	if !ok {
 		return
@@ -264,7 +257,7 @@ func (h Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Request) {
 	_, rawRoomID, _, ok := h.readRoom(w, r)
 	if !ok {
 		return
@@ -318,7 +311,7 @@ func (h Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-func (h Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) {
 	_, rawRoomID, _, ok := h.readRoom(w, r)
 	if !ok {
 		return
@@ -363,7 +356,7 @@ func (h Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 	type requestBody struct {
 		Email    string `json:"email" validate:"required,email"`
 		Password string `json:"password" validate:"required,min=12"`
@@ -438,7 +431,7 @@ func (h Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, response{ID: userID.String()})
 }
 
-func (h Handlers) Login(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	type requestBody struct {
 		Email    string `json:"email" validate:"required,email"`
 		Password string `json:"password" validate:"required"`
