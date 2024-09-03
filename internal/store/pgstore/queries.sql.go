@@ -12,6 +12,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (email, password_hash, name, bio)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateUserParams struct {
+	Email        string `db:"email" json:"email"`
+	PasswordHash string `db:"password_hash" json:"password_hash"`
+	Name         string `db:"name" json:"name"`
+	Bio          string `db:"bio" json:"bio"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Name,
+		arg.Bio,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getMessage = `-- name: GetMessage :one
 SELECT
   "id", "room_id", "message", "reaction_count", "answered", "created_at"
@@ -133,6 +158,33 @@ func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, name, bio, password_hash
+FROM users
+WHERE email = $1 LIMIT 1
+`
+
+type GetUserByEmailRow struct {
+	ID           uuid.UUID `db:"id" json:"id"`
+	Email        string    `db:"email" json:"email"`
+	Name         string    `db:"name" json:"name"`
+	Bio          string    `db:"bio" json:"bio"`
+	PasswordHash string    `db:"password_hash" json:"password_hash"`
+}
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i GetUserByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.Bio,
+		&i.PasswordHash,
+	)
+	return i, err
 }
 
 const insertMessage = `-- name: InsertMessage :one

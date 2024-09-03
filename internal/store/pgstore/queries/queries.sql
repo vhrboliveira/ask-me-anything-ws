@@ -56,3 +56,13 @@ SET
   updated_at = now()
 WHERE
   id = $1;
+
+-- name: CreateUser :one
+INSERT INTO users (email, password_hash, name, bio)
+VALUES ($1, $2, $3, $4)
+RETURNING id;
+
+-- name: GetUserByEmail :one
+SELECT id, email, name, bio, password_hash
+FROM users
+WHERE email = $1 LIMIT 1;

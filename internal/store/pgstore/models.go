@@ -25,3 +25,13 @@ type Room struct {
 	CreatedAt pgtype.Date `db:"created_at" json:"created_at"`
 	UpdatedAt pgtype.Date `db:"updated_at" json:"updated_at"`
 }
+
+type User struct {
+	ID           uuid.UUID        `db:"id" json:"id"`
+	Email        string           `db:"email" json:"email"`
+	PasswordHash string           `db:"password_hash" json:"password_hash"`
+	Name         string           `db:"name" json:"name"`
+	Bio          string           `db:"bio" json:"bio"`
+	CreatedAt    pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt    pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+}
