@@ -516,12 +516,20 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type response struct {
-		ID    string `json:"id"`
-		Token string `json:"token"`
+		ID        string `json:"id"`
+		Email     string `json:"email"`
+		Name      string `json:"name"`
+		Bio       string `json:"bio"`
+		CreatedAt string `json:"created_at"`
+		Token     string `json:"token"`
 	}
 
 	sendJSON(w, response{
-		ID:    user.ID.String(),
-		Token: token,
+		ID:        user.ID.String(),
+		Email:     user.Email,
+		Name:      user.Name,
+		Bio:       user.Bio,
+		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
+		Token:     token,
 	})
 }
