@@ -32,7 +32,8 @@ func TestCreateRoomMessages(t *testing.T) {
 		defer response.Body.Close()
 
 		var result struct {
-			ID string `json:"id"`
+			ID        string `json:"id"`
+			CreatedAt string `json:"created_at"`
 		}
 
 		assertStatusCode(t, response, http.StatusCreated)
@@ -44,6 +45,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		}
 
 		assertValidUUID(t, result.ID)
+		assertValidDate(t, result.CreatedAt)
 	})
 
 	t.Run("sends a message to the websocket subscribers when a message is created in a room", func(t *testing.T) {
@@ -74,7 +76,8 @@ func TestCreateRoomMessages(t *testing.T) {
 		defer response.Body.Close()
 
 		var result struct {
-			ID string `json:"id"`
+			ID        string `json:"id"`
+			CreatedAt string `json:"created_at"`
 		}
 
 		assertStatusCode(t, response, http.StatusCreated)
@@ -86,6 +89,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		}
 
 		assertValidUUID(t, result.ID)
+		assertValidDate(t, result.CreatedAt)
 
 		_, p, err := ws.ReadMessage()
 		if err != nil {
@@ -111,6 +115,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		assertResponse(t, receivedMessage.Kind, web.MessageKindMessageCreated)
 		assertResponse(t, messageCreated.ID, result.ID)
 		assertResponse(t, messageCreated.Message, want)
+		assertValidDate(t, messageCreated.CreatedAt)
 	})
 
 	t.Run("returns token not found error if token is not found", func(t *testing.T) {

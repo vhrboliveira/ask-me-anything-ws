@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -87,6 +88,13 @@ func assertValidUUID(t testing.TB, id string) {
 	t.Helper()
 	if _, err := uuid.Parse(id); err != nil {
 		t.Errorf("ID is not a valid UUID: %q. Error: %v", id, err)
+	}
+}
+
+func assertValidDate(t testing.TB, date string) {
+	t.Helper()
+	if _, err := time.Parse(time.RFC3339, date); err != nil {
+		t.Errorf("Date is not a valid date with format YYYY-MM-DDTHH:mm:ssZ: %v", err)
 	}
 }
 

@@ -25,8 +25,9 @@ func TestGetRoom(t *testing.T) {
 		assertStatusCode(t, response, http.StatusOK)
 
 		var results []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			CreatedAt string `json:"created_at"`
 		}
 
 		body := parseResponseBody(t, response)
@@ -46,6 +47,7 @@ func TestGetRoom(t *testing.T) {
 
 		for _, result := range results {
 			assertValidUUID(t, result.ID)
+			assertValidDate(t, result.CreatedAt)
 
 			if _, ok := expectedNames[result.Name]; !ok {
 				t.Errorf("Unexpected room name: %s", result.Name)

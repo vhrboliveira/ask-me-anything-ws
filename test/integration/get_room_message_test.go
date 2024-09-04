@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
@@ -59,6 +60,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 		for i, result := range results {
 			assertValidUUID(t, result.ID.String())
+			assertValidDate(t, result.CreatedAt.Time.Format(time.RFC3339))
 
 			if _, ok := expectedMsgs[result.Message]; !ok {
 				t.Errorf("Unexpected message at index %d: %q", i, result.Message)
