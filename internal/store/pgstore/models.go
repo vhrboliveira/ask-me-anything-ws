@@ -10,20 +10,20 @@ import (
 )
 
 type Message struct {
-	ID            uuid.UUID   `db:"id" json:"id"`
-	RoomID        uuid.UUID   `db:"room_id" json:"room_id"`
-	Message       string      `db:"message" json:"message"`
-	ReactionCount int32       `db:"reaction_count" json:"reaction_count"`
-	Answered      bool        `db:"answered" json:"answered"`
-	CreatedAt     pgtype.Date `db:"created_at" json:"created_at"`
-	UpdatedAt     pgtype.Date `db:"updated_at" json:"updated_at"`
+	ID            uuid.UUID        `db:"id" json:"id"`
+	RoomID        uuid.UUID        `db:"room_id" json:"room_id"`
+	Message       string           `db:"message" json:"message"`
+	ReactionCount int32            `db:"reaction_count" json:"reaction_count"`
+	Answered      bool             `db:"answered" json:"answered"`
+	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 }
 
 type Room struct {
-	ID        uuid.UUID   `db:"id" json:"id"`
-	Name      string      `db:"name" json:"name"`
-	CreatedAt pgtype.Date `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Date `db:"updated_at" json:"updated_at"`
+	ID        uuid.UUID        `db:"id" json:"id"`
+	Name      string           `db:"name" json:"name"`
+	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 }
 
 type User struct {

@@ -15,7 +15,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, name, bio)
 VALUES ($1, $2, $3, $4)
-RETURNING id
+RETURNING id, email, name, bio, created_at
 `
 
 type CreateUserParams struct {
@@ -25,16 +25,30 @@ type CreateUserParams struct {
 	Bio          string `db:"bio" json:"bio"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (uuid.UUID, error) {
+type CreateUserRow struct {
+	ID        uuid.UUID        `db:"id" json:"id"`
+	Email     string           `db:"email" json:"email"`
+	Name      string           `db:"name" json:"name"`
+	Bio       string           `db:"bio" json:"bio"`
+	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.Email,
 		arg.PasswordHash,
 		arg.Name,
 		arg.Bio,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i CreateUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.Bio,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getMessage = `-- name: GetMessage :one
@@ -45,12 +59,12 @@ WHERE id = $1
 `
 
 type GetMessageRow struct {
-	ID            uuid.UUID   `db:"id" json:"id"`
-	RoomID        uuid.UUID   `db:"room_id" json:"room_id"`
-	Message       string      `db:"message" json:"message"`
-	ReactionCount int32       `db:"reaction_count" json:"reaction_count"`
-	Answered      bool        `db:"answered" json:"answered"`
-	CreatedAt     pgtype.Date `db:"created_at" json:"created_at"`
+	ID            uuid.UUID        `db:"id" json:"id"`
+	RoomID        uuid.UUID        `db:"room_id" json:"room_id"`
+	Message       string           `db:"message" json:"message"`
+	ReactionCount int32            `db:"reaction_count" json:"reaction_count"`
+	Answered      bool             `db:"answered" json:"answered"`
+	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (GetMessageRow, error) {
@@ -90,16 +104,16 @@ const getRoomMessages = `-- name: GetRoomMessages :many
 SELECT
   "id", "room_id", "message", "reaction_count", "answered", "created_at"
 FROM messages
-WHERE room_id = $1
+WHERE room_id = $1 ORDER BY created_at DESC
 `
 
 type GetRoomMessagesRow struct {
-	ID            uuid.UUID   `db:"id" json:"id"`
-	RoomID        uuid.UUID   `db:"room_id" json:"room_id"`
-	Message       string      `db:"message" json:"message"`
-	ReactionCount int32       `db:"reaction_count" json:"reaction_count"`
-	Answered      bool        `db:"answered" json:"answered"`
-	CreatedAt     pgtype.Date `db:"created_at" json:"created_at"`
+	ID            uuid.UUID        `db:"id" json:"id"`
+	RoomID        uuid.UUID        `db:"room_id" json:"room_id"`
+	Message       string           `db:"message" json:"message"`
+	ReactionCount int32            `db:"reaction_count" json:"reaction_count"`
+	Answered      bool             `db:"answered" json:"answered"`
+	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetRoomMessagesRow, error) {
@@ -131,13 +145,14 @@ func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetR
 
 const getRooms = `-- name: GetRooms :many
 SELECT
-  "id", "name"
-FROM rooms
+  "id", "name", "created_at"
+FROM rooms ORDER BY created_at ASC
 `
 
 type GetRoomsRow struct {
-	ID   uuid.UUID `db:"id" json:"id"`
-	Name string    `db:"name" json:"name"`
+	ID        uuid.UUID        `db:"id" json:"id"`
+	Name      string           `db:"name" json:"name"`
+	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
@@ -149,7 +164,7 @@ func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
 	var items []GetRoomsRow
 	for rows.Next() {
 		var i GetRoomsRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -191,7 +206,7 @@ const insertMessage = `-- name: InsertMessage :one
 INSERT INTO messages
   ("room_id", "message") VALUES
   ($1, $2)
-RETURNING "id"
+RETURNING "id", "created_at"
 `
 
 type InsertMessageParams struct {
@@ -199,25 +214,35 @@ type InsertMessageParams struct {
 	Message string    `db:"message" json:"message"`
 }
 
-func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (uuid.UUID, error) {
+type InsertMessageRow struct {
+	ID        uuid.UUID        `db:"id" json:"id"`
+	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (InsertMessageRow, error) {
 	row := q.db.QueryRow(ctx, insertMessage, arg.RoomID, arg.Message)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i InsertMessageRow
+	err := row.Scan(&i.ID, &i.CreatedAt)
+	return i, err
 }
 
 const insertRoom = `-- name: InsertRoom :one
 INSERT INTO rooms
   ("name") VALUES
   ($1)
-RETURNING "id"
+RETURNING "id", "created_at"
 `
 
-func (q *Queries) InsertRoom(ctx context.Context, name string) (uuid.UUID, error) {
+type InsertRoomRow struct {
+	ID        uuid.UUID        `db:"id" json:"id"`
+	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) InsertRoom(ctx context.Context, name string) (InsertRoomRow, error) {
 	row := q.db.QueryRow(ctx, insertRoom, name)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i InsertRoomRow
+	err := row.Scan(&i.ID, &i.CreatedAt)
+	return i, err
 }
 
 const markMessageAsAnswered = `-- name: MarkMessageAsAnswered :exec
