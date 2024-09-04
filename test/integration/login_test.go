@@ -16,7 +16,7 @@ func TestLogin(t *testing.T) {
 	)
 
 	insertUser := func(t testing.TB, user pgstore.CreateUserParams) string {
-		userPayload := strings.NewReader(`{ "email": "` + user.Email + `", "name": "` + user.Name + `", "password": "` + user.PasswordHash + `" }`)
+		userPayload := strings.NewReader(`{ "email": "` + user.Email + `", "name": "` + user.Name + `", "password": "` + user.PasswordHash + `", "bio": "` + user.Bio + `" }`)
 		rr := execRequest(method, "/users", userPayload)
 		response := rr.Result()
 		defer response.Body.Close()
@@ -47,6 +47,7 @@ func TestLogin(t *testing.T) {
 			Email:        "test@example.com",
 			PasswordHash: "password123456789!",
 			Name:         "Test User",
+			Bio:          "Test Bio",
 		}
 
 		// Insert user with hashed password
@@ -62,8 +63,12 @@ func TestLogin(t *testing.T) {
 		body := parseResponseBody(t, response)
 
 		type responseType struct {
-			ID    string `json:"id"`
-			Token string `json:"token"`
+			ID        string `json:"id"`
+			Email     string `json:"email"`
+			Name      string `json:"name"`
+			Bio       string `json:"bio"`
+			CreatedAt string `json:"created_at"`
+			Token     string `json:"token"`
 		}
 
 		var got responseType
@@ -74,6 +79,10 @@ func TestLogin(t *testing.T) {
 
 		assertResponse(t, userID, got.ID)
 		assertValidToken(t, got.Token)
+		assertValidDate(t, got.CreatedAt)
+		assertResponse(t, user.Email, got.Email)
+		assertResponse(t, user.Name, got.Name)
+		assertResponse(t, user.Bio, got.Bio)
 	})
 
 	t.Run("returns an error if body is invalid", func(t *testing.T) {
