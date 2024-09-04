@@ -3,11 +3,9 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/go-chi/jwtauth/v5"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
 
@@ -38,15 +36,6 @@ func TestLogin(t *testing.T) {
 		}
 
 		return got.ID
-	}
-
-	assertValidToken := func(t testing.TB, token string) {
-		jwtSecret := os.Getenv("JWT_SECRET")
-		tokenAuth := jwtauth.New("HS256", []byte(jwtSecret), nil)
-		_, err := jwtauth.VerifyToken(tokenAuth, token)
-		if err != nil {
-			t.Fatalf("failed to parse token: %v", err)
-		}
 	}
 
 	t.Run("returns a token and user id if login is successful", func(t *testing.T) {

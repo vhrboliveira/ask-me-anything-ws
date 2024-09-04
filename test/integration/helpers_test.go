@@ -5,9 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/go-chi/jwtauth/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/vhrboliveira/ama-go/internal/auth"
@@ -95,6 +97,16 @@ func assertValidDate(t testing.TB, date string) {
 	t.Helper()
 	if _, err := time.Parse(time.RFC3339, date); err != nil {
 		t.Errorf("Date is not a valid date with format YYYY-MM-DDTHH:mm:ssZ: %v", err)
+	}
+}
+
+func assertValidToken(t testing.TB, token string) {
+	t.Helper()
+	jwtSecret := os.Getenv("JWT_SECRET")
+	tokenAuth := jwtauth.New("HS256", []byte(jwtSecret), nil)
+	_, err := jwtauth.VerifyToken(tokenAuth, token)
+	if err != nil {
+		t.Fatalf("failed to parse token: %v", err)
 	}
 }
 

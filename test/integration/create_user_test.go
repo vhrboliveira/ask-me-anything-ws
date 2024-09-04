@@ -43,6 +43,7 @@ func TestCreateUser(t *testing.T) {
 			Name      string `json:"name"`
 			Bio       string `json:"bio"`
 			CreatedAt string `json:"created_at"`
+			Token     string `json:"token"`
 		}
 
 		if err := json.Unmarshal(body, &result); err != nil {
@@ -54,6 +55,7 @@ func TestCreateUser(t *testing.T) {
 		assertResponse(t, user.Email, result.Email)
 		assertResponse(t, user.Name, result.Name)
 		assertResponse(t, user.Bio, result.Bio)
+		assertValidToken(t, result.Token)
 	})
 
 	t.Run("returns an error if request body is invalid", func(t *testing.T) {
