@@ -6,14 +6,14 @@ WHERE id = $1;
 
 -- name: GetRooms :many
 SELECT
-  "id", "name"
-FROM rooms;
+  "id", "name", "created_at"
+FROM rooms ORDER BY created_at ASC;
 
 -- name: InsertRoom :one
 INSERT INTO rooms
   ("name") VALUES
   ($1)
-RETURNING "id";
+RETURNING "id", "created_at";
 
 -- name: GetMessage :one
 SELECT
@@ -25,13 +25,13 @@ WHERE id = $1;
 SELECT
   "id", "room_id", "message", "reaction_count", "answered", "created_at"
 FROM messages
-WHERE room_id = $1;
+WHERE room_id = $1 ORDER BY created_at DESC;
 
 -- name: InsertMessage :one
 INSERT INTO messages
   ("room_id", "message") VALUES
   ($1, $2)
-RETURNING "id";
+RETURNING "id", "created_at";
 
 -- name: ReactToMessage :one
 UPDATE messages
@@ -60,7 +60,7 @@ WHERE
 -- name: CreateUser :one
 INSERT INTO users (email, password_hash, name, bio)
 VALUES ($1, $2, $3, $4)
-RETURNING id;
+RETURNING id, email, name, bio, created_at;
 
 -- name: GetUserByEmail :one
 SELECT id, email, name, bio, password_hash
