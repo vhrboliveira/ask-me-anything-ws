@@ -63,6 +63,6 @@ VALUES ($1, $2, $3, $4)
 RETURNING id, email, name, bio, created_at;
 
 -- name: GetUserByEmail :one
-SELECT id, email, name, bio, password_hash
+SELECT id, email, name, bio, password_hash, created_at
 FROM users
 WHERE email = $1 LIMIT 1;

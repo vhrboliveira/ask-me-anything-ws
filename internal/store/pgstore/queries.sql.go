@@ -176,17 +176,18 @@ func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, name, bio, password_hash
+SELECT id, email, name, bio, password_hash, created_at
 FROM users
 WHERE email = $1 LIMIT 1
 `
 
 type GetUserByEmailRow struct {
-	ID           uuid.UUID `db:"id" json:"id"`
-	Email        string    `db:"email" json:"email"`
-	Name         string    `db:"name" json:"name"`
-	Bio          string    `db:"bio" json:"bio"`
-	PasswordHash string    `db:"password_hash" json:"password_hash"`
+	ID           uuid.UUID        `db:"id" json:"id"`
+	Email        string           `db:"email" json:"email"`
+	Name         string           `db:"name" json:"name"`
+	Bio          string           `db:"bio" json:"bio"`
+	PasswordHash string           `db:"password_hash" json:"password_hash"`
+	CreatedAt    pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
@@ -198,6 +199,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEm
 		&i.Name,
 		&i.Bio,
 		&i.PasswordHash,
+		&i.CreatedAt,
 	)
 	return i, err
 }
