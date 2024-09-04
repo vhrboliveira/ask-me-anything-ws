@@ -21,7 +21,14 @@ func TestCreateUser(t *testing.T) {
 			truncateTables(t)
 		})
 
-		payload := strings.NewReader(`{"email": "test@example.com", "password": "password12345678", "name": "Test User"}`)
+		user := pgstore.CreateUserParams{
+			Email:        "test@example.com",
+			PasswordHash: "password12345678",
+			Name:         "Test User",
+			Bio:          "Test Bio",
+		}
+
+		payload := strings.NewReader(fmt.Sprintf(`{"email": "%s", "password": "%s", "name": "%s", "bio": "%s"}`, user.Email, user.PasswordHash, user.Name, user.Bio))
 		rr := execRequest(method, baseURL, payload)
 
 		response := rr.Result()
@@ -31,7 +38,11 @@ func TestCreateUser(t *testing.T) {
 
 		body := parseResponseBody(t, response)
 		var result struct {
-			ID string `json:"id"`
+			ID        string `json:"id"`
+			Email     string `json:"email"`
+			Name      string `json:"name"`
+			Bio       string `json:"bio"`
+			CreatedAt string `json:"created_at"`
 		}
 
 		if err := json.Unmarshal(body, &result); err != nil {
@@ -39,6 +50,10 @@ func TestCreateUser(t *testing.T) {
 		}
 
 		assertValidUUID(t, result.ID)
+		assertValidDate(t, result.CreatedAt)
+		assertResponse(t, user.Email, result.Email)
+		assertResponse(t, user.Name, result.Name)
+		assertResponse(t, user.Bio, result.Bio)
 	})
 
 	t.Run("returns an error if request body is invalid", func(t *testing.T) {
