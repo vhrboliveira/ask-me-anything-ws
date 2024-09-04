@@ -427,12 +427,20 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	token, err := auth.GenerateJWT(user.ID, user.Email)
+	if err != nil {
+		slog.Error("failed to generate token", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	type response struct {
 		ID        string `json:"id"`
 		Email     string `json:"email"`
 		Name      string `json:"name"`
 		Bio       string `json:"bio"`
 		CreatedAt string `json:"created_at"`
+		Token     string `json:"token"`
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -442,6 +450,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Name:      user.Name,
 		Bio:       user.Bio,
 		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
+		Token:     token,
 	})
 }
 
