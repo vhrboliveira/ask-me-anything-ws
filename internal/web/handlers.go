@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator"
@@ -67,7 +68,7 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	roomID, err := h.Queries.InsertRoom(r.Context(), body.Name)
+	room, err := h.Queries.InsertRoom(r.Context(), body.Name)
 	if err != nil {
 		slog.Error("error creating room", "error", err)
 		http.Error(w, "error creating room", http.StatusInternalServerError)
@@ -75,18 +76,20 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type response struct {
-		ID string `json:"id"`
+		ID        string `json:"id"`
+		CreatedAt string `json:"created_at"`
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	sendJSON(w, response{ID: roomID.String()})
+	sendJSON(w, response{ID: room.ID.String(), CreatedAt: room.CreatedAt.Time.Format(time.RFC3339)})
 
 	go h.notifyRoomsListClients(Message{
 		Kind:   MessageKindRoomCreated,
-		RoomID: roomID.String(),
+		RoomID: room.ID.String(),
 		Value: RoomCreated{
-			ID:   roomID.String(),
-			Name: body.Name,
+			ID:        room.ID.String(),
+			CreatedAt: room.CreatedAt.Time.Format(time.RFC3339),
+			Name:      body.Name,
 		},
 	})
 }
@@ -132,7 +135,7 @@ func (h *Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messageID, err := h.Queries.InsertMessage(r.Context(), pgstore.InsertMessageParams{
+	message, err := h.Queries.InsertMessage(r.Context(), pgstore.InsertMessageParams{
 		RoomID:  roomID,
 		Message: body.Message,
 	})
@@ -144,15 +147,16 @@ func (h *Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type response struct {
-		ID string `json:"id"`
+		ID        string `json:"id"`
+		CreatedAt string `json:"created_at"`
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	sendJSON(w, response{ID: messageID.String()})
+	sendJSON(w, response{ID: message.ID.String(), CreatedAt: message.CreatedAt.Time.Format(time.RFC3339)})
 
 	go h.notifyRoomClient(Message{
 		Kind:   MessageKindMessageCreated,
-		Value:  MessageCreated{ID: messageID.String(), Message: body.Message},
+		Value:  MessageCreated{ID: message.ID.String(), CreatedAt: message.CreatedAt.Time.Format(time.RFC3339), Message: body.Message},
 		RoomID: rawRoomID,
 	})
 }
