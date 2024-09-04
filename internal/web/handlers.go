@@ -410,7 +410,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := h.Queries.CreateUser(r.Context(), pgstore.CreateUserParams{
+	user, err := h.Queries.CreateUser(r.Context(), pgstore.CreateUserParams{
 		Email:        body.Email,
 		PasswordHash: string(hashedPassword),
 		Name:         body.Name,
@@ -428,11 +428,21 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type response struct {
-		ID string `json:"id"`
+		ID        string `json:"id"`
+		Email     string `json:"email"`
+		Name      string `json:"name"`
+		Bio       string `json:"bio"`
+		CreatedAt string `json:"created_at"`
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	sendJSON(w, response{ID: userID.String()})
+	sendJSON(w, response{
+		ID:        user.ID.String(),
+		Email:     user.Email,
+		Name:      user.Name,
+		Bio:       user.Bio,
+		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
+	})
 }
 
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
