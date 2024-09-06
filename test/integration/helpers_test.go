@@ -16,8 +16,18 @@ import (
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
 
-func getAuthToken() string {
-	token, err := auth.GenerateJWT(uuid.New(), "test@test.com")
+func generateAuthToken(userID *string) string {
+	var id uuid.UUID
+	if userID == nil {
+		userID = new(string)
+		*userID = uuid.New().String()
+	}
+	id, err := uuid.Parse(*userID)
+	if err != nil {
+		panic(err)
+	}
+
+	token, err := auth.GenerateJWT(id, "test@test.com")
 	if err != nil {
 		panic(err)
 	}
@@ -25,8 +35,11 @@ func getAuthToken() string {
 	return token
 }
 
-func execRequest(method, url string, body io.Reader) *httptest.ResponseRecorder {
-	token := "Bearer " + getAuthToken()
+func execRequest(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	userID := generateUser(t)
+
+	token := "Bearer " + generateAuthToken(&userID)
 
 	r := httptest.NewRequest(method, url, body)
 	r.Header.Set("Authorization", token)
@@ -49,8 +62,21 @@ func execRequestWithoutAuth(method, url string, body io.Reader) *httptest.Respon
 }
 
 func execRequestWithInvalidAuth(method, url string, body io.Reader) *httptest.ResponseRecorder {
-	token := "Bearer " + getAuthToken()
+	token := "Bearer " + generateAuthToken(nil)
 	token = token[:len(token)-1]
+
+	r := httptest.NewRequest(method, url, body)
+	r.Header.Set("Authorization", token)
+
+	rr := httptest.NewRecorder()
+
+	Router.ServeHTTP(rr, r)
+
+	return rr
+}
+
+func execRequestGeneratingToken(method, url string, body io.Reader, userID *string) *httptest.ResponseRecorder {
+	token := "Bearer " + generateAuthToken(userID)
 
 	r := httptest.NewRequest(method, url, body)
 	r.Header.Set("Authorization", token)

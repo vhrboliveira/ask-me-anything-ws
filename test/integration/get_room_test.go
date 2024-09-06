@@ -12,111 +12,114 @@ func TestGetRoom(t *testing.T) {
 		method = http.MethodGet
 	)
 
-	t.Run("returns rooms list", func(t *testing.T) {
-		roomNames := []string{"learning Go", "learning Rust"}
+	t.Run("GET /api/rooms", func(t *testing.T) {
 
-		truncateTables(t)
-		createRooms(t, roomNames)
+		t.Run("returns rooms list", func(t *testing.T) {
+			roomNames := []string{"learning Go", "learning Rust"}
 
-		rr := execRequest(method, url, nil)
-		response := rr.Result()
-		defer response.Body.Close()
+			truncateTables(t)
+			createRooms(t, roomNames)
 
-		assertStatusCode(t, response, http.StatusOK)
+			rr := execRequest(t, method, url, nil)
+			response := rr.Result()
+			defer response.Body.Close()
 
-		var results []struct {
-			ID        string `json:"id"`
-			Name      string `json:"name"`
-			CreatedAt string `json:"created_at"`
-		}
+			assertStatusCode(t, response, http.StatusOK)
 
-		body := parseResponseBody(t, response)
-
-		if err := json.Unmarshal(body, &results); err != nil {
-			t.Fatalf("Error to unmarshal body: %q. Error: %v", body, err)
-		}
-
-		if lRoom, lRes := len(roomNames), len(results); lRoom != lRes {
-			t.Errorf("Expected %d room(s), Got: %d", lRoom, lRes)
-		}
-
-		expectedNames := make(map[string]bool, len(roomNames))
-		for _, name := range roomNames {
-			expectedNames[name] = true
-		}
-
-		for _, result := range results {
-			assertValidUUID(t, result.ID)
-			assertValidDate(t, result.CreatedAt)
-
-			if _, ok := expectedNames[result.Name]; !ok {
-				t.Errorf("Unexpected room name: %s", result.Name)
+			var results []struct {
+				ID        string `json:"id"`
+				Name      string `json:"name"`
+				CreatedAt string `json:"created_at"`
 			}
 
-			delete(expectedNames, result.Name)
-		}
-	})
+			body := parseResponseBody(t, response)
 
-	t.Run("returns empty rooms list if there is no rooms", func(t *testing.T) {
-		truncateTables(t)
+			if err := json.Unmarshal(body, &results); err != nil {
+				t.Fatalf("Error to unmarshal body: %q. Error: %v", body, err)
+			}
 
-		rr := execRequest(method, url, nil)
-		response := rr.Result()
-		defer response.Body.Close()
+			if lRoom, lRes := len(roomNames), len(results); lRoom != lRes {
+				t.Errorf("Expected %d room(s), Got: %d", lRoom, lRes)
+			}
 
-		assertStatusCode(t, response, http.StatusOK)
-		body := parseResponseBody(t, response)
+			expectedNames := make(map[string]bool, len(roomNames))
+			for _, name := range roomNames {
+				expectedNames[name] = true
+			}
 
-		want := "[]"
-		assertResponse(t, want, string(body))
-	})
+			for _, result := range results {
+				assertValidUUID(t, result.ID)
+				assertValidDate(t, result.CreatedAt)
 
-	t.Run("returns token not found error if token is not found", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
+				if _, ok := expectedNames[result.Name]; !ok {
+					t.Errorf("Unexpected room name: %s", result.Name)
+				}
+
+				delete(expectedNames, result.Name)
+			}
 		})
 
-		rr := execRequestWithoutAuth(method, url, nil)
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusUnauthorized)
-
-		body := parseResponseBody(t, response)
-
-		want := "no token found\n"
-		assertResponse(t, want, string(body))
-	})
-
-	t.Run("returns authentication error if token is invalid", func(t *testing.T) {
-		t.Cleanup(func() {
+		t.Run("returns empty rooms list if there is no rooms", func(t *testing.T) {
 			truncateTables(t)
+
+			rr := execRequest(t, method, url, nil)
+			response := rr.Result()
+			defer response.Body.Close()
+
+			assertStatusCode(t, response, http.StatusOK)
+			body := parseResponseBody(t, response)
+
+			want := "[]"
+			assertResponse(t, want, string(body))
 		})
 
-		rr := execRequestWithInvalidAuth(method, url, nil)
-		response := rr.Result()
-		defer response.Body.Close()
+		t.Run("returns token not found error if token is not found", func(t *testing.T) {
+			t.Cleanup(func() {
+				truncateTables(t)
+			})
 
-		assertStatusCode(t, response, http.StatusUnauthorized)
+			rr := execRequestWithoutAuth(method, url, nil)
+			response := rr.Result()
+			defer response.Body.Close()
 
-		body := parseResponseBody(t, response)
+			assertStatusCode(t, response, http.StatusUnauthorized)
 
-		want := "token is unauthorized\n"
-		assertResponse(t, want, string(body))
-	})
+			body := parseResponseBody(t, response)
 
-	t.Run("returns an error if database returns an error", func(t *testing.T) {
-		truncateTables(t)
-		setRoomsConstraintFailure(t)
+			want := "no token found\n"
+			assertResponse(t, want, string(body))
+		})
 
-		rr := execRequest(method, url, nil)
-		response := rr.Result()
-		defer response.Body.Close()
+		t.Run("returns authentication error if token is invalid", func(t *testing.T) {
+			t.Cleanup(func() {
+				truncateTables(t)
+			})
 
-		assertStatusCode(t, response, http.StatusInternalServerError)
-		body := parseResponseBody(t, response)
+			rr := execRequestWithInvalidAuth(method, url, nil)
+			response := rr.Result()
+			defer response.Body.Close()
 
-		want := "error getting rooms list\n"
-		assertResponse(t, want, string(body))
+			assertStatusCode(t, response, http.StatusUnauthorized)
+
+			body := parseResponseBody(t, response)
+
+			want := "token is unauthorized\n"
+			assertResponse(t, want, string(body))
+		})
+
+		t.Run("returns an error if database returns an error", func(t *testing.T) {
+			truncateTables(t)
+			setRoomsConstraintFailure(t)
+
+			rr := execRequest(t, method, url, nil)
+			response := rr.Result()
+			defer response.Body.Close()
+
+			assertStatusCode(t, response, http.StatusInternalServerError)
+			body := parseResponseBody(t, response)
+
+			want := "error getting rooms list\n"
+			assertResponse(t, want, string(body))
+		})
 	})
 }

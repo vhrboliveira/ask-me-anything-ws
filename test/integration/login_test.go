@@ -17,7 +17,7 @@ func TestLogin(t *testing.T) {
 
 	insertUser := func(t testing.TB, user pgstore.CreateUserParams) string {
 		userPayload := strings.NewReader(`{ "email": "` + user.Email + `", "name": "` + user.Name + `", "password": "` + user.PasswordHash + `", "bio": "` + user.Bio + `" }`)
-		rr := execRequest(method, "/users", userPayload)
+		rr := execRequestWithoutAuth(method, "/users", userPayload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -54,7 +54,7 @@ func TestLogin(t *testing.T) {
 		userID := insertUser(t, user)
 
 		payload := strings.NewReader(`{"email": "` + user.Email + `", "password": "` + user.PasswordHash + `"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestWithoutAuth(method, url, payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -87,7 +87,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("returns an error if body is invalid", func(t *testing.T) {
 		payload := strings.NewReader(`invalid json`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestWithoutAuth(method, url, payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -101,7 +101,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("returns an error if password is missing", func(t *testing.T) {
 		payload := strings.NewReader(`{"email": "test@example.com"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestWithoutAuth(method, url, payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -115,7 +115,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("returns an error if email is missing", func(t *testing.T) {
 		payload := strings.NewReader(`{"password": "password"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestWithoutAuth(method, url, payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -129,7 +129,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("returns an error if email is invalid", func(t *testing.T) {
 		payload := strings.NewReader(`{"email": "test.com", "password": "password"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestWithoutAuth(method, url, payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -143,7 +143,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("returns invalid credentials error if user does not exist", func(t *testing.T) {
 		payload := strings.NewReader(`{"email": "test@example.com", "password": "password"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestWithoutAuth(method, url, payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -170,7 +170,7 @@ func TestLogin(t *testing.T) {
 		insertUser(t, user)
 
 		payload := strings.NewReader(`{"email": "` + user.Email + `", "password": "incorrect"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestWithoutAuth(method, url, payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -189,7 +189,7 @@ func TestLogin(t *testing.T) {
 		setCreateUserConstraintError(t)
 
 		payload := strings.NewReader(`{"email": "test@example.com", "password": "password"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestWithoutAuth(method, url, payload)
 		response := rr.Result()
 		defer response.Body.Close()
 

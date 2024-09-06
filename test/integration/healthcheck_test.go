@@ -11,7 +11,7 @@ func TestHealthcheck(t *testing.T) {
 		method = http.MethodGet
 	)
 
-	rr := execRequest(method, url, nil)
+	rr := execRequest(t, method, url, nil)
 
 	response := rr.Result()
 	defer response.Body.Close()

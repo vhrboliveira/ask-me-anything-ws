@@ -35,7 +35,7 @@ func TestGetRoomMessages(t *testing.T) {
 		insertMessages(t, msgs)
 
 		newURL := baseURL + room.ID.String() + "/messages"
-		rr := execRequest(method, newURL, nil)
+		rr := execRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -114,7 +114,7 @@ func TestGetRoomMessages(t *testing.T) {
 		})
 
 		newURL := baseURL + "invalid_id/messages"
-		rr := execRequest(method, newURL, nil)
+		rr := execRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -133,7 +133,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 		fakeID := uuid.New().String()
 		newURL := baseURL + fakeID + "/messages"
-		rr := execRequest(method, newURL, nil)
+		rr := execRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -153,7 +153,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 		fakeID := uuid.New().String()
 		newURL := baseURL + fakeID + "/messages"
-		rr := execRequest(method, newURL, nil)
+		rr := execRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -172,7 +172,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 		room := createAndGetRoom(t)
 		newURL := baseURL + room.ID.String() + "/messages"
-		rr := execRequest(method, newURL, nil)
+		rr := execRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -191,7 +191,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 		room := createAndGetRoom(t)
 		newURL := baseURL + room.ID.String() + "/messages"
-		rr := execRequest(method, newURL, nil)
+		rr := execRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -213,7 +213,7 @@ func TestGetRoomMessages(t *testing.T) {
 			messageID := createAndGetMessages(t, room.ID)
 
 			newURL := baseURL + room.ID.String() + "/messages/" + messageID
-			rr := execRequest(method, newURL, nil)
+			rr := execRequest(t, method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
 
@@ -253,7 +253,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 			fakeID := uuid.New().String()
 			newURL := baseURL + "invalid_room_id/messages/" + fakeID
-			rr := execRequest(method, newURL, nil)
+			rr := execRequest(t, method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
 
@@ -272,7 +272,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 			fakeID := uuid.New().String()
 			newURL := baseURL + fakeID + "/messages/" + fakeID
-			rr := execRequest(method, newURL, nil)
+			rr := execRequest(t, method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
 
@@ -291,7 +291,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 			room := createAndGetRoom(t)
 			newURL := baseURL + room.ID.String() + "/messages/invalid_message_id"
-			rr := execRequest(method, newURL, nil)
+			rr := execRequest(t, method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
 
@@ -311,7 +311,7 @@ func TestGetRoomMessages(t *testing.T) {
 			room := createAndGetRoom(t)
 			fakeID := uuid.New().String()
 			newURL := baseURL + room.ID.String() + "/messages/" + fakeID
-			rr := execRequest(method, newURL, nil)
+			rr := execRequest(t, method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
 
@@ -332,7 +332,7 @@ func TestGetRoomMessages(t *testing.T) {
 			room := createAndGetRoom(t)
 			fakeID := uuid.New().String()
 			newURL := baseURL + room.ID.String() + "/messages/" + fakeID
-			rr := execRequest(method, newURL, nil)
+			rr := execRequest(t, method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
 

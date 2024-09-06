@@ -26,7 +26,7 @@ func TestCreateRoom(t *testing.T) {
 		roomName := "Learning Go"
 		userID := generateUser(t)
 		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestGeneratingToken(method, url, payload, &userID)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -58,9 +58,9 @@ func TestCreateRoom(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe?token=" + getAuthToken()
+		wsURL := "ws" + server.URL[4:] + "/subscribe?token=" + generateAuthToken(nil)
 		headers := http.Header{}
-		headers.Add("Authorization", "Bearer "+getAuthToken())
+		headers.Add("Authorization", "Bearer "+generateAuthToken(nil))
 		ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
 		if err != nil {
 			t.Fatalf("failed to connect to websocket: %v", err)
@@ -70,7 +70,7 @@ func TestCreateRoom(t *testing.T) {
 		roomName := "Learning Go"
 		userID := generateUser(t)
 		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestGeneratingToken(method, url, payload, &userID)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -84,7 +84,7 @@ func TestCreateRoom(t *testing.T) {
 			CreatedAt string `json:"created_at"`
 		}
 		if err := json.Unmarshal(body, &result); err != nil {
-			t.Errorf("Error to unmarshal body: %v", err)
+			t.Fatalf("Error to unmarshal body: %v", err)
 		}
 
 		// Read the message from WebSocket
@@ -177,7 +177,7 @@ func TestCreateRoom(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`{ "invalid": "field" }`)
-		rr := execRequest(method, url, payload)
+		rr := execRequest(t, method, url, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -196,7 +196,7 @@ func TestCreateRoom(t *testing.T) {
 		})
 
 		payload := strings.NewReader("aaaaaaa")
-		rr := execRequest(method, url, payload)
+		rr := execRequest(t, method, url, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -215,7 +215,7 @@ func TestCreateRoom(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`{"name": "Learning Go"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequest(t, method, url, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -234,7 +234,7 @@ func TestCreateRoom(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`{"name": "Learning Go", "user_id": "invalid-uuid"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequest(t, method, url, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -256,7 +256,7 @@ func TestCreateRoom(t *testing.T) {
 		roomName2 := "Learning Rust"
 		userId := uuid.New().String()
 		payload := strings.NewReader(`[{"name": "` + roomName + `", "user_id": "` + userId + `"}, {"name": "` + roomName2 + `", "user_id": "` + userId + `"}]`)
-		rr := execRequest(method, url, payload)
+		rr := execRequest(t, method, url, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -276,7 +276,7 @@ func TestCreateRoom(t *testing.T) {
 		roomName := "Learning Go"
 		userId := uuid.New().String()
 		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userId + `"}`)
-		rr := execRequest(method, url, payload)
+		rr := execRequestGeneratingToken(method, url, payload, &userId)
 
 		response := rr.Result()
 		defer response.Body.Close()

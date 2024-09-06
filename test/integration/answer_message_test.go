@@ -22,7 +22,7 @@ func TestAnswerMessage(t *testing.T) {
 		room := createAndGetRoom(t)
 		msg := createAndGetMessages(t, room.ID)
 
-		rr := execRequest(http.MethodPatch, baseURL+room.ID.String()+"/messages/"+msg+"/answer", nil)
+		rr := execRequest(t, http.MethodPatch, baseURL+room.ID.String()+"/messages/"+msg+"/answer", nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -40,16 +40,16 @@ func TestAnswerMessage(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + getAuthToken()
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + generateAuthToken(nil)
 		headers := http.Header{}
-		headers.Add("Authorization", "Bearer "+getAuthToken())
+		headers.Add("Authorization", "Bearer "+generateAuthToken(nil))
 		ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
 		if err != nil {
 			t.Fatalf("failed to connect to websocket: %v", err)
 		}
 		defer ws.Close()
 
-		rr := execRequest(http.MethodPatch, baseURL+room.ID.String()+"/messages/"+msg+"/answer", nil)
+		rr := execRequest(t, http.MethodPatch, baseURL+room.ID.String()+"/messages/"+msg+"/answer", nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -120,7 +120,7 @@ func TestAnswerMessage(t *testing.T) {
 
 		fakeID := uuid.New().String()
 		newURL := baseURL + "invalid_room_id/messages/" + fakeID + "/answer"
-		rr := execRequest(http.MethodPatch, newURL, nil)
+		rr := execRequest(t, http.MethodPatch, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -139,7 +139,7 @@ func TestAnswerMessage(t *testing.T) {
 
 		fakeID := uuid.New().String()
 		newURL := baseURL + fakeID + "/messages/" + fakeID + "/answer"
-		rr := execRequest(http.MethodPatch, newURL, nil)
+		rr := execRequest(t, http.MethodPatch, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -158,7 +158,7 @@ func TestAnswerMessage(t *testing.T) {
 
 		room := createAndGetRoom(t)
 		newURL := baseURL + room.ID.String() + "/messages/invalid_message_id/answer"
-		rr := execRequest(http.MethodPatch, newURL, nil)
+		rr := execRequest(t, http.MethodPatch, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -178,7 +178,7 @@ func TestAnswerMessage(t *testing.T) {
 		room := createAndGetRoom(t)
 		fakeID := uuid.New().String()
 		newURL := baseURL + room.ID.String() + "/messages/" + fakeID + "/answer"
-		rr := execRequest(http.MethodPatch, newURL, nil)
+		rr := execRequest(t, http.MethodPatch, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -199,7 +199,7 @@ func TestAnswerMessage(t *testing.T) {
 		room := createAndGetRoom(t)
 		fakeID := uuid.New().String()
 		newURL := baseURL + room.ID.String() + "/messages/" + fakeID + "/answer"
-		rr := execRequest(http.MethodPatch, newURL, nil)
+		rr := execRequest(t, http.MethodPatch, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -220,7 +220,7 @@ func TestAnswerMessage(t *testing.T) {
 
 		msgID := createAndGetMessages(t, room.ID)
 		newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/answer"
-		rr := execRequest(http.MethodPatch, newURL, nil)
+		rr := execRequest(t, http.MethodPatch, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 

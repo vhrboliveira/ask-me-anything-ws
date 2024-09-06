@@ -26,7 +26,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		room := createAndGetRoom(t)
 		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
 		payload := strings.NewReader(`{"message": "Is Go awesome?"}`)
-		rr := execRequest(method, newURL, payload)
+		rr := execRequest(t, method, newURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -58,9 +58,9 @@ func TestCreateRoomMessages(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + getAuthToken()
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + generateAuthToken(nil)
 		headers := http.Header{}
-		headers.Add("Authorization", "Bearer "+getAuthToken())
+		headers.Add("Authorization", "Bearer "+generateAuthToken(nil))
 		ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
 		if err != nil {
 			t.Fatalf("failed to connect to websocket: %v", err)
@@ -70,7 +70,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		want := "Is Go awesome?"
 		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
 		payload := strings.NewReader(`{"message": "` + want + `"}`)
-		rr := execRequest(method, newURL, payload)
+		rr := execRequest(t, method, newURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -85,7 +85,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		body := parseResponseBody(t, response)
 
 		if err := json.Unmarshal(body, &result); err != nil {
-			t.Errorf("Error to unmarshal body: %v", err)
+			t.Fatalf("Error to unmarshal body: %v", err)
 		}
 
 		assertValidUUID(t, result.ID)
@@ -161,7 +161,7 @@ func TestCreateRoomMessages(t *testing.T) {
 			truncateTables(t)
 		})
 
-		rr := execRequest(method, url, nil)
+		rr := execRequest(t, method, url, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -180,7 +180,7 @@ func TestCreateRoomMessages(t *testing.T) {
 
 		fakeID := uuid.New().String()
 		newURL := strings.Replace(url, "room_id", fakeID, 1)
-		rr := execRequest(method, newURL, nil)
+		rr := execRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -200,7 +200,7 @@ func TestCreateRoomMessages(t *testing.T) {
 
 		fakeID := uuid.New().String()
 		newURL := strings.Replace(url, "room_id", fakeID, 1)
-		rr := execRequest(method, newURL, nil)
+		rr := execRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -220,7 +220,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		room := createAndGetRoom(t)
 		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
 		payload := strings.NewReader(`{"invalid": "invalid"}`)
-		rr := execRequest(method, newURL, payload)
+		rr := execRequest(t, method, newURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -241,7 +241,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		room := createAndGetRoom(t)
 		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
 		payload := strings.NewReader(`aaaaaa`)
-		rr := execRequest(method, newURL, payload)
+		rr := execRequest(t, method, newURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -262,7 +262,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		room := createAndGetRoom(t)
 		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
 		payload := strings.NewReader(`[{"message": "a valid message"}, {"message": "another valid message"}]`)
-		rr := execRequest(method, newURL, payload)
+		rr := execRequest(t, method, newURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -284,7 +284,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		room := createAndGetRoom(t)
 		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
 		payload := strings.NewReader(`{"message": "a valid message"}`)
-		rr := execRequest(method, newURL, payload)
+		rr := execRequest(t, method, newURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()

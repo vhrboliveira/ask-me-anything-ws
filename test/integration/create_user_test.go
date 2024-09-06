@@ -29,7 +29,7 @@ func TestCreateUser(t *testing.T) {
 		}
 
 		payload := strings.NewReader(fmt.Sprintf(`{"email": "%s", "password": "%s", "name": "%s", "bio": "%s"}`, user.Email, user.PasswordHash, user.Name, user.Bio))
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -64,7 +64,7 @@ func TestCreateUser(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`invalid`)
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -83,7 +83,7 @@ func TestCreateUser(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`{ "invalid": "field" }`)
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -102,7 +102,7 @@ func TestCreateUser(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`{ "password": "password12345678", "name": "Test User" }`)
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -121,7 +121,7 @@ func TestCreateUser(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`{ "email": "test@example.com", "name": "Test User" }`)
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -140,7 +140,7 @@ func TestCreateUser(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`{ "email": "test@example.com", "password": "password12345678" }`)
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -159,7 +159,7 @@ func TestCreateUser(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`{ "email": "testexample.com", "password": "password12345678", "name": "Test User" }`)
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -178,7 +178,7 @@ func TestCreateUser(t *testing.T) {
 		})
 
 		payload := strings.NewReader(`{ "email": "test@example.com", "password": "short", "name": "Test User" }`)
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -205,7 +205,7 @@ func TestCreateUser(t *testing.T) {
 		createUser(t, user.Email, user.PasswordHash, user.Name)
 
 		payload := strings.NewReader(fmt.Sprintf(`{"email": "%s", "password": "%s", "name": "%s"}`, user.Email, user.PasswordHash, user.Name))
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -226,7 +226,7 @@ func TestCreateUser(t *testing.T) {
 		setCreateUserConstraintError(t)
 
 		payload := strings.NewReader(`{"email": "test@example.com", "password": "password12345678", "name": "Test User"}`)
-		rr := execRequest(method, baseURL, payload)
+		rr := execRequestWithoutAuth(method, baseURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()

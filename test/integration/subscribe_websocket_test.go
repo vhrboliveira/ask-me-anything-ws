@@ -15,7 +15,7 @@ func TestSubscribeToRoom(t *testing.T) {
 		defer server.Close()
 
 		room := createAndGetRoom(t)
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + getAuthToken()
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + generateAuthToken(nil)
 		ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		if err != nil {
 			t.Fatalf("failed to connect to websocket: %v", err)
@@ -46,7 +46,7 @@ func TestSubscribeToRoom(t *testing.T) {
 		defer server.Close()
 
 		fakeID := uuid.New().String()
-		token := getAuthToken()
+		token := generateAuthToken(nil)
 		invalidToken := token[:len(token)-1]
 		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + fakeID + "?token=" + invalidToken
 		_, res, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -67,7 +67,7 @@ func TestSubscribeToRoom(t *testing.T) {
 		defer server.Close()
 
 		// Connect to WebSocket
-		wsURL := "ws" + server.URL[4:] + "/subscribe?token=" + getAuthToken()
+		wsURL := "ws" + server.URL[4:] + "/subscribe?token=" + generateAuthToken(nil)
 		ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		if err != nil {
 			t.Fatalf("failed to connect to websocket: %v", err)
@@ -96,7 +96,7 @@ func TestSubscribeToRoom(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		token := getAuthToken()
+		token := generateAuthToken(nil)
 		invalidToken := token[:len(token)-1]
 		wsURL := "ws" + server.URL[4:] + "/subscribe?token=" + invalidToken
 		_, res, err := websocket.DefaultDialer.Dial(wsURL, nil)
