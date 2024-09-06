@@ -66,3 +66,23 @@ func WebsocketAuthenticator(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// GetUserIDFromToken extracts the user ID from the JWT token
+func GetUserIDFromToken(ctx context.Context) (uuid.UUID, error) {
+	_, claims, err := jwtauth.FromContext(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	userIDStr, ok := claims["user_id"].(string)
+	if !ok {
+		return uuid.Nil, errors.New("user_id not found in token")
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	return userID, nil
+}

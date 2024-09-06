@@ -87,6 +87,19 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tokenUserID, err := auth.GetUserIDFromToken(r.Context())
+	if err != nil {
+		slog.Error("error getting user id from token", "error", err)
+		http.Error(w, "error getting user id from token", http.StatusInternalServerError)
+		return
+	}
+
+	if tokenUserID != userID {
+		slog.Error("user id does not match", "token user id", tokenUserID, "body user id", userID)
+		http.Error(w, "invalid user id", http.StatusForbidden)
+		return
+	}
+
 	room, err := h.Queries.InsertRoom(r.Context(), pgstore.InsertRoomParams{
 		Name:   body.Name,
 		UserID: userID,
