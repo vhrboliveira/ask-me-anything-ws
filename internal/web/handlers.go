@@ -47,7 +47,8 @@ func (h *Handlers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	type requestBody struct {
-		Name string `json:"name" validate:"required"`
+		Name   string `json:"name" validate:"required"`
+		UserID string `json:"user_id" validate:"required,uuid"`
 	}
 
 	var body requestBody
@@ -61,11 +62,22 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validate.Struct(&body); err != nil {
-		msg := "validation failed: missing required field(s): name"
-		slog.Error(msg, "error", err)
-		http.Error(w, msg, http.StatusBadRequest)
-		return
+		slog.Error("validation failed", "error", err)
 
+		missingFields := []string{}
+		for _, err := range err.(validator.ValidationErrors) {
+			if err.Tag() == "required" {
+				missingFields = append(missingFields, err.Field())
+			}
+
+			if err.Tag() == "uuid" && err.Field() == "UserID" {
+				http.Error(w, "validation failed: UserID must be a valid UUID", http.StatusBadRequest)
+				return
+			}
+		}
+
+		http.Error(w, "validation failed, missing required field(s): "+strings.Join(missingFields, ", "), http.StatusBadRequest)
+		return
 	}
 
 	room, err := h.Queries.InsertRoom(r.Context(), body.Name)
