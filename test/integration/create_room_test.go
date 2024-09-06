@@ -117,6 +117,26 @@ func TestCreateRoom(t *testing.T) {
 		assertResponse(t, roomCreated.UserID, userID)
 	})
 
+	t.Run("returns forbidden error if user ID does not match token user ID", func(t *testing.T) {
+		t.Cleanup(func() {
+			truncateTables(t)
+		})
+
+		roomName := "Learning Go"
+		userID := generateUser(t)
+		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `"}`)
+		rr := execRequest(t, method, url, payload)
+		response := rr.Result()
+		defer response.Body.Close()
+
+		assertStatusCode(t, response, http.StatusForbidden)
+
+		body := parseResponseBody(t, response)
+
+		want := "invalid user id\n"
+		assertResponse(t, want, string(body))
+	})
+
 	t.Run("returns token not found error if token is not found", func(t *testing.T) {
 		t.Cleanup(func() {
 			truncateTables(t)
