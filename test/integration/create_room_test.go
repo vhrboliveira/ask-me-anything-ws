@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/vhrboliveira/ama-go/internal/web"
 )
@@ -22,7 +23,9 @@ func TestCreateRoom(t *testing.T) {
 			truncateTables(t)
 		})
 
-		payload := strings.NewReader(`{"name": "Learning Go"}`)
+		roomName := "Learning Go"
+		userId := uuid.New().String()
+		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userId + `"}`)
 		rr := execRequest(method, url, payload)
 
 		response := rr.Result()
@@ -62,8 +65,9 @@ func TestCreateRoom(t *testing.T) {
 		}
 		defer ws.Close()
 
-		want := "Learning Go"
-		payload := strings.NewReader(`{"name": "` + want + `"}`)
+		roomName := "Learning Go"
+		userId := uuid.New().String()
+		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userId + `"}`)
 		rr := execRequest(method, url, payload)
 
 		response := rr.Result()
@@ -105,7 +109,7 @@ func TestCreateRoom(t *testing.T) {
 
 		assertResponse(t, receivedMessage.Kind, web.MessageKindRoomCreated)
 		assertResponse(t, roomCreated.ID, result.ID)
-		assertResponse(t, roomCreated.Name, want)
+		assertResponse(t, roomCreated.Name, roomName)
 		assertValidDate(t, roomCreated.CreatedAt)
 		assertValidDate(t, result.CreatedAt)
 	})
@@ -159,7 +163,7 @@ func TestCreateRoom(t *testing.T) {
 
 		body := parseResponseBody(t, response)
 
-		want := "validation failed: missing required field(s): name\n"
+		want := "validation failed, missing required field(s): Name, UserID\n"
 		assertResponse(t, want, string(body))
 	})
 
@@ -182,12 +186,53 @@ func TestCreateRoom(t *testing.T) {
 		assertResponse(t, want, string(body))
 	})
 
+	t.Run("returns an error if user ID is not provided", func(t *testing.T) {
+		t.Cleanup(func() {
+			truncateTables(t)
+		})
+
+		payload := strings.NewReader(`{"name": "Learning Go"}`)
+		rr := execRequest(method, url, payload)
+
+		response := rr.Result()
+		defer response.Body.Close()
+
+		assertStatusCode(t, response, http.StatusBadRequest)
+
+		body := parseResponseBody(t, response)
+
+		want := "validation failed, missing required field(s): UserID\n"
+		assertResponse(t, want, string(body))
+	})
+
+	t.Run("returns error if user ID is not a valid UUID", func(t *testing.T) {
+		t.Cleanup(func() {
+			truncateTables(t)
+		})
+
+		payload := strings.NewReader(`{"name": "Learning Go", "user_id": "invalid-uuid"}`)
+		rr := execRequest(method, url, payload)
+
+		response := rr.Result()
+		defer response.Body.Close()
+
+		assertStatusCode(t, response, http.StatusBadRequest)
+
+		body := parseResponseBody(t, response)
+
+		want := "validation failed: UserID must be a valid UUID\n"
+		assertResponse(t, want, string(body))
+	})
+
 	t.Run("returns error if payload provides multiples rooms", func(t *testing.T) {
 		t.Cleanup(func() {
 			truncateTables(t)
 		})
 
-		payload := strings.NewReader(`[{"name": "Learning Go"}, {"name": "Learning Rust"}]`)
+		roomName := "Learning Go"
+		roomName2 := "Learning Rust"
+		userId := uuid.New().String()
+		payload := strings.NewReader(`[{"name": "` + roomName + `", "user_id": "` + userId + `"}, {"name": "` + roomName2 + `", "user_id": "` + userId + `"}]`)
 		rr := execRequest(method, url, payload)
 
 		response := rr.Result()
@@ -202,11 +247,12 @@ func TestCreateRoom(t *testing.T) {
 	})
 
 	t.Run("returns an error if fails to insert room", func(t *testing.T) {
-		name := "Learning Go"
 		truncateTables(t)
 		setRoomsConstraintFailure(t)
 
-		payload := strings.NewReader(`{"name": "` + name + `"}`)
+		roomName := "Learning Go"
+		userId := uuid.New().String()
+		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userId + `"}`)
 		rr := execRequest(method, url, payload)
 
 		response := rr.Result()
