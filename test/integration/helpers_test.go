@@ -129,17 +129,19 @@ func createRooms(t testing.TB, names []string) {
 	t.Helper()
 	ctx := context.Background()
 
+	userID := generateUser(t)
+
 	tx, err := DBPool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("Failed to create rooms: %v", err)
 	}
 	defer tx.Rollback(ctx)
 
-	stmt := `INSERT INTO rooms (name) VALUES ($1)`
+	stmt := `INSERT INTO rooms (name, user_id) VALUES ($1, $2)`
 
 	batch := &pgx.Batch{}
 	for _, name := range names {
-		batch.Queue(stmt, name)
+		batch.Queue(stmt, name, userID)
 	}
 
 	bx := tx.SendBatch(ctx, batch)
@@ -401,6 +403,27 @@ func setAnswerMessageConstraintFailure(t testing.TB, roomID uuid.UUID) {
 	if err != nil {
 		t.Fatalf("Failed to update constraint message: %v", err)
 	}
+}
+
+func generateUser(t testing.TB) string {
+	t.Helper()
+
+	email := uuid.New().String() + "@test.com"
+	password := uuid.New().String()
+	name := "test"
+
+	createUser(t, email, password, name)
+
+	ctx := context.Background()
+
+	user := DBPool.QueryRow(ctx, "SELECT id FROM users WHERE email = $1", email)
+	var id string
+	err := user.Scan(&id)
+	if err != nil {
+		t.Fatalf("Failed to scan user: %v", err)
+	}
+
+	return id
 }
 
 func createUser(t testing.TB, email, password, name string) {

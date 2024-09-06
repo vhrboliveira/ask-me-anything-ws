@@ -24,8 +24,8 @@ func TestCreateRoom(t *testing.T) {
 		})
 
 		roomName := "Learning Go"
-		userId := uuid.New().String()
-		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userId + `"}`)
+		userID := generateUser(t)
+		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `"}`)
 		rr := execRequest(method, url, payload)
 
 		response := rr.Result()
@@ -33,6 +33,7 @@ func TestCreateRoom(t *testing.T) {
 
 		var result struct {
 			ID        string `json:"id"`
+			UserID    string `json:"user_id"`
 			CreatedAt string `json:"created_at"`
 		}
 
@@ -46,6 +47,7 @@ func TestCreateRoom(t *testing.T) {
 
 		assertValidUUID(t, result.ID)
 		assertValidDate(t, result.CreatedAt)
+		assertResponse(t, result.UserID, userID)
 	})
 
 	t.Run("sends a message to the websocket subscribers when a room is created", func(t *testing.T) {
@@ -66,8 +68,8 @@ func TestCreateRoom(t *testing.T) {
 		defer ws.Close()
 
 		roomName := "Learning Go"
-		userId := uuid.New().String()
-		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userId + `"}`)
+		userID := generateUser(t)
+		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `"}`)
 		rr := execRequest(method, url, payload)
 
 		response := rr.Result()
@@ -112,6 +114,7 @@ func TestCreateRoom(t *testing.T) {
 		assertResponse(t, roomCreated.Name, roomName)
 		assertValidDate(t, roomCreated.CreatedAt)
 		assertValidDate(t, result.CreatedAt)
+		assertResponse(t, roomCreated.UserID, userID)
 	})
 
 	t.Run("returns token not found error if token is not found", func(t *testing.T) {
