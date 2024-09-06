@@ -50,6 +50,7 @@ type RoomCreated struct {
 	ID        string `json:"id"`
 	CreatedAt string `json:"created_at"`
 	Name      string `json:"name"`
+	UserID    string `json:"user_id"`
 }
 
 func (h Handlers) readRoom(w http.ResponseWriter, r *http.Request) (room pgstore.GetRoomRow, rawRoomID string, roomId uuid.UUID, ok bool) {

@@ -80,7 +80,18 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	room, err := h.Queries.InsertRoom(r.Context(), body.Name)
+	userID, err := uuid.Parse(body.UserID)
+	if err != nil {
+		slog.Error("invalid user id", "error", err)
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	room, err := h.Queries.InsertRoom(r.Context(), pgstore.InsertRoomParams{
+		Name:   body.Name,
+		UserID: userID,
+	})
+
 	if err != nil {
 		slog.Error("error creating room", "error", err)
 		http.Error(w, "error creating room", http.StatusInternalServerError)
@@ -89,11 +100,12 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	type response struct {
 		ID        string `json:"id"`
+		UserID    string `json:"user_id"`
 		CreatedAt string `json:"created_at"`
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	sendJSON(w, response{ID: room.ID.String(), CreatedAt: room.CreatedAt.Time.Format(time.RFC3339)})
+	sendJSON(w, response{ID: room.ID.String(), UserID: userID.String(), CreatedAt: room.CreatedAt.Time.Format(time.RFC3339)})
 
 	go h.notifyRoomsListClients(Message{
 		Kind:   MessageKindRoomCreated,
@@ -102,6 +114,7 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 			ID:        room.ID.String(),
 			CreatedAt: room.CreatedAt.Time.Format(time.RFC3339),
 			Name:      body.Name,
+			UserID:    userID.String(),
 		},
 	})
 }
