@@ -83,20 +83,21 @@ func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (GetMessageRow, 
 
 const getRoom = `-- name: GetRoom :one
 SELECT 
-  "id", "name"
+  "id", "name", "user_id"
 FROM rooms
 WHERE id = $1
 `
 
 type GetRoomRow struct {
-	ID   uuid.UUID `db:"id" json:"id"`
-	Name string    `db:"name" json:"name"`
+	ID     uuid.UUID `db:"id" json:"id"`
+	Name   string    `db:"name" json:"name"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
 }
 
 func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (GetRoomRow, error) {
 	row := q.db.QueryRow(ctx, getRoom, id)
 	var i GetRoomRow
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(&i.ID, &i.Name, &i.UserID)
 	return i, err
 }
 
@@ -145,13 +146,14 @@ func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetR
 
 const getRooms = `-- name: GetRooms :many
 SELECT
-  "id", "name", "created_at"
+  "id", "name", "user_id", "created_at"
 FROM rooms ORDER BY created_at ASC
 `
 
 type GetRoomsRow struct {
 	ID        uuid.UUID        `db:"id" json:"id"`
 	Name      string           `db:"name" json:"name"`
+	UserID    uuid.UUID        `db:"user_id" json:"user_id"`
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
@@ -164,7 +166,12 @@ func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
 	var items []GetRoomsRow
 	for rows.Next() {
 		var i GetRoomsRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.UserID,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -230,18 +237,23 @@ func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (I
 
 const insertRoom = `-- name: InsertRoom :one
 INSERT INTO rooms
-  ("name") VALUES
-  ($1)
+  ("name", "user_id") VALUES
+  ($1, $2)
 RETURNING "id", "created_at"
 `
+
+type InsertRoomParams struct {
+	Name   string    `db:"name" json:"name"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
 
 type InsertRoomRow struct {
 	ID        uuid.UUID        `db:"id" json:"id"`
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
-func (q *Queries) InsertRoom(ctx context.Context, name string) (InsertRoomRow, error) {
-	row := q.db.QueryRow(ctx, insertRoom, name)
+func (q *Queries) InsertRoom(ctx context.Context, arg InsertRoomParams) (InsertRoomRow, error) {
+	row := q.db.QueryRow(ctx, insertRoom, arg.Name, arg.UserID)
 	var i InsertRoomRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err

@@ -1,18 +1,18 @@
 -- name: GetRoom :one
 SELECT 
-  "id", "name"
+  "id", "name", "user_id"
 FROM rooms
 WHERE id = $1;
 
 -- name: GetRooms :many
 SELECT
-  "id", "name", "created_at"
+  "id", "name", "user_id", "created_at"
 FROM rooms ORDER BY created_at ASC;
 
 -- name: InsertRoom :one
 INSERT INTO rooms
-  ("name") VALUES
-  ($1)
+  ("name", "user_id") VALUES
+  ($1, $2)
 RETURNING "id", "created_at";
 
 -- name: GetMessage :one

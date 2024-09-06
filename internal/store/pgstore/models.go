@@ -24,6 +24,7 @@ type Room struct {
 	Name      string           `db:"name" json:"name"`
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 	UpdatedAt pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	UserID    uuid.UUID        `db:"user_id" json:"user_id"`
 }
 
 type User struct {
