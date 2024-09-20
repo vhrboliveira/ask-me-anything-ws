@@ -1,4 +1,10 @@
 services:
+  ama-valkey-test:
+    image: valkey/valkey:7.2.6-alpine
+    container_name: ama-valkey-test
+    restart: unless-stopped
+    ports:
+      - 6380:6379
   ama-db-test:
     image: postgres:alpine
     ports:

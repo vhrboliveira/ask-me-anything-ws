@@ -12,6 +12,7 @@ services:
       - ../.env
     depends_on:
       - ama-db
+      - ama-valkey
     volumes:
       - ..:/app
       - /app/tmp # Air needs a temporary directory
@@ -30,7 +31,18 @@ services:
       POSTGRES_DB: ${DB_NAME}
     volumes:
       - ama-db:/var/lib/postgresql/data
+  ama-valkey:
+    image: valkey/valkey:7.2.6-alpine
+    container_name: ama-valkey
+    command: valkey-server --save 60 1 --loglevel verbose
+    restart: unless-stopped
+    ports:
+      - 6379:6379
+    volumes:
+      - ama-valkey:/data
 
 volumes:
   ama-db:
+    driver: local
+  ama-valkey:
     driver: local
