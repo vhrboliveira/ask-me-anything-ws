@@ -13,63 +13,45 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, password_hash, name, bio)
-VALUES ($1, $2, $3, $4)
-RETURNING id, email, name, bio, created_at
+INSERT INTO users
+  ("email", "name", "provider", "provider_user_id", "avatar_url") VALUES
+  ($1, $2, $3, $4, $5)
+RETURNING "id", "created_at"
 `
 
 type CreateUserParams struct {
-	Email        string `db:"email" json:"email"`
-	PasswordHash string `db:"password_hash" json:"password_hash"`
-	Name         string `db:"name" json:"name"`
-	Bio          string `db:"bio" json:"bio"`
+	Email          string `db:"email" json:"email"`
+	Name           string `db:"name" json:"name"`
+	Provider       string `db:"provider" json:"provider"`
+	ProviderUserID string `db:"provider_user_id" json:"provider_user_id"`
+	AvatarUrl      string `db:"avatar_url" json:"avatar_url"`
 }
 
 type CreateUserRow struct {
 	ID        uuid.UUID        `db:"id" json:"id"`
-	Email     string           `db:"email" json:"email"`
-	Name      string           `db:"name" json:"name"`
-	Bio       string           `db:"bio" json:"bio"`
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.Email,
-		arg.PasswordHash,
 		arg.Name,
-		arg.Bio,
+		arg.Provider,
+		arg.ProviderUserID,
+		arg.AvatarUrl,
 	)
 	var i CreateUserRow
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Name,
-		&i.Bio,
-		&i.CreatedAt,
-	)
+	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }
 
 const getMessage = `-- name: GetMessage :one
-SELECT
-  "id", "room_id", "message", "reaction_count", "answered", "created_at"
-FROM messages
-WHERE id = $1
+SELECT id, room_id, message, reaction_count, answered, created_at, updated_at FROM messages WHERE id = $1
 `
 
-type GetMessageRow struct {
-	ID            uuid.UUID        `db:"id" json:"id"`
-	RoomID        uuid.UUID        `db:"room_id" json:"room_id"`
-	Message       string           `db:"message" json:"message"`
-	ReactionCount int32            `db:"reaction_count" json:"reaction_count"`
-	Answered      bool             `db:"answered" json:"answered"`
-	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
-}
-
-func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (GetMessageRow, error) {
+func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (Message, error) {
 	row := q.db.QueryRow(ctx, getMessage, id)
-	var i GetMessageRow
+	var i Message
 	err := row.Scan(
 		&i.ID,
 		&i.RoomID,
@@ -77,55 +59,41 @@ func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (GetMessageRow, 
 		&i.ReactionCount,
 		&i.Answered,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getRoom = `-- name: GetRoom :one
-SELECT 
-  "id", "name", "user_id"
-FROM rooms
-WHERE id = $1
+SELECT id, name, created_at, updated_at, user_id FROM rooms WHERE id = $1
 `
 
-type GetRoomRow struct {
-	ID     uuid.UUID `db:"id" json:"id"`
-	Name   string    `db:"name" json:"name"`
-	UserID uuid.UUID `db:"user_id" json:"user_id"`
-}
-
-func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (GetRoomRow, error) {
+func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (Room, error) {
 	row := q.db.QueryRow(ctx, getRoom, id)
-	var i GetRoomRow
-	err := row.Scan(&i.ID, &i.Name, &i.UserID)
+	var i Room
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UserID,
+	)
 	return i, err
 }
 
 const getRoomMessages = `-- name: GetRoomMessages :many
-SELECT
-  "id", "room_id", "message", "reaction_count", "answered", "created_at"
-FROM messages
-WHERE room_id = $1 ORDER BY created_at DESC
+SELECT id, room_id, message, reaction_count, answered, created_at, updated_at FROM messages WHERE room_id = $1 ORDER BY created_at DESC
 `
 
-type GetRoomMessagesRow struct {
-	ID            uuid.UUID        `db:"id" json:"id"`
-	RoomID        uuid.UUID        `db:"room_id" json:"room_id"`
-	Message       string           `db:"message" json:"message"`
-	ReactionCount int32            `db:"reaction_count" json:"reaction_count"`
-	Answered      bool             `db:"answered" json:"answered"`
-	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
-}
-
-func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetRoomMessagesRow, error) {
+func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]Message, error) {
 	rows, err := q.db.Query(ctx, getRoomMessages, roomID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetRoomMessagesRow
+	var items []Message
 	for rows.Next() {
-		var i GetRoomMessagesRow
+		var i Message
 		if err := rows.Scan(
 			&i.ID,
 			&i.RoomID,
@@ -133,6 +101,7 @@ func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetR
 			&i.ReactionCount,
 			&i.Answered,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -144,33 +113,58 @@ func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetR
 	return items, nil
 }
 
-const getRooms = `-- name: GetRooms :many
+const getRoomWithUser = `-- name: GetRoomWithUser :one
 SELECT
-  "id", "name", "user_id", "created_at"
-FROM rooms ORDER BY created_at ASC
+  r."id", r."name", r."created_at", u."email", u."name" as "creator_name", u."avatar_url", u."enable_picture"
+FROM rooms r
+LEFT JOIN users u ON r.user_id = u.id
+WHERE r.id = $1
 `
 
-type GetRoomsRow struct {
-	ID        uuid.UUID        `db:"id" json:"id"`
-	Name      string           `db:"name" json:"name"`
-	UserID    uuid.UUID        `db:"user_id" json:"user_id"`
-	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+type GetRoomWithUserRow struct {
+	ID            uuid.UUID        `db:"id" json:"id"`
+	Name          string           `db:"name" json:"name"`
+	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
+	Email         pgtype.Text      `db:"email" json:"email"`
+	CreatorName   pgtype.Text      `db:"creator_name" json:"creator_name"`
+	AvatarUrl     pgtype.Text      `db:"avatar_url" json:"avatar_url"`
+	EnablePicture pgtype.Bool      `db:"enable_picture" json:"enable_picture"`
 }
 
-func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
+func (q *Queries) GetRoomWithUser(ctx context.Context, id uuid.UUID) (GetRoomWithUserRow, error) {
+	row := q.db.QueryRow(ctx, getRoomWithUser, id)
+	var i GetRoomWithUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.Email,
+		&i.CreatorName,
+		&i.AvatarUrl,
+		&i.EnablePicture,
+	)
+	return i, err
+}
+
+const getRooms = `-- name: GetRooms :many
+SELECT id, name, created_at, updated_at, user_id FROM rooms ORDER BY created_at ASC
+`
+
+func (q *Queries) GetRooms(ctx context.Context) ([]Room, error) {
 	rows, err := q.db.Query(ctx, getRooms)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetRoomsRow
+	var items []Room
 	for rows.Next() {
-		var i GetRoomsRow
+		var i Room
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.UserID,
 			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -183,30 +177,45 @@ func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, name, bio, password_hash, created_at
-FROM users
-WHERE email = $1 LIMIT 1
+SELECT id, email, name, created_at, updated_at, avatar_url, enable_picture, provider, provider_user_id, new_user FROM users WHERE email = $1 LIMIT 1
 `
 
-type GetUserByEmailRow struct {
-	ID           uuid.UUID        `db:"id" json:"id"`
-	Email        string           `db:"email" json:"email"`
-	Name         string           `db:"name" json:"name"`
-	Bio          string           `db:"bio" json:"bio"`
-	PasswordHash string           `db:"password_hash" json:"password_hash"`
-	CreatedAt    pgtype.Timestamp `db:"created_at" json:"created_at"`
-}
-
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
-	var i GetUserByEmailRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
 		&i.Name,
-		&i.Bio,
-		&i.PasswordHash,
 		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AvatarUrl,
+		&i.EnablePicture,
+		&i.Provider,
+		&i.ProviderUserID,
+		&i.NewUser,
+	)
+	return i, err
+}
+
+const getUserById = `-- name: GetUserById :one
+SELECT id, email, name, created_at, updated_at, avatar_url, enable_picture, provider, provider_user_id, new_user FROM users WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetUserById(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserById, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AvatarUrl,
+		&i.EnablePicture,
+		&i.Provider,
+		&i.ProviderUserID,
+		&i.NewUser,
 	)
 	return i, err
 }
