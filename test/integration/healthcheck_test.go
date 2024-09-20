@@ -3,6 +3,8 @@ package api_test
 import (
 	"net/http"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHealthcheck(t *testing.T) {
@@ -11,15 +13,15 @@ func TestHealthcheck(t *testing.T) {
 		method = http.MethodGet
 	)
 
-	rr := execRequest(t, method, url, nil)
+	rr := execRequestWithoutCookie(method, url, nil)
 
 	response := rr.Result()
 	defer response.Body.Close()
 
-	assertStatusCode(t, response, http.StatusOK)
+	assert.Equal(t, response.StatusCode, http.StatusOK)
 
 	body := parseResponseBody(t, response)
 
 	want := "OK"
-	assertResponse(t, want, string(body))
+	assert.Equal(t, want, body)
 }

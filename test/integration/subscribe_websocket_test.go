@@ -7,108 +7,79 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSubscribeToRoom(t *testing.T) {
-	t.Run("subscribes to room", func(t *testing.T) {
-		server := httptest.NewServer(Router)
-		defer server.Close()
+	server := httptest.NewServer(Router)
+	defer server.Close()
+	baseURL := "ws" + server.URL[4:] + "/subscribe"
 
-		room := createAndGetRoom(t)
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + generateAuthToken(nil)
-		ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		if err != nil {
-			t.Fatalf("failed to connect to websocket: %v", err)
-		}
-		defer ws.Close()
-	})
+	testCases := []struct {
+		name    string
+		addRoom bool
+	}{
+		{
+			name:    "subscribes to room",
+			addRoom: true,
+		},
+		{
+			name:    "subscribes to room list",
+			addRoom: false,
+		},
+	}
 
-	t.Run("returns token not found error if token is not found when subscribing to room", func(t *testing.T) {
-		server := httptest.NewServer(Router)
-		defer server.Close()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			truncateData(t)
+			wsURL := baseURL
 
-		fakeID := uuid.New().String()
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + fakeID
-		_, res, err := websocket.DefaultDialer.Dial(wsURL, nil)
+			if tc.addRoom {
+				room := createAndGetRoom(t)
+				wsURL += "/room/" + room.ID.String()
+			}
 
-		assertStatusCode(t, res, http.StatusUnauthorized)
+			ws, err := connectAuthenticatedWS(t, wsURL)
+			require.NoError(t, err)
 
-		body := parseResponseBody(t, res)
-		wantRes := "no token found\n"
-		assertResponse(t, wantRes, string(body))
+			defer ws.Close()
+		})
 
-		wantErr := "websocket: bad handshake"
-		assertResponse(t, wantErr, err.Error())
-	})
+		t.Run("returns unauthorized error if sessionID is not found", func(t *testing.T) {
+			wsURL := baseURL
 
-	t.Run("returns authentication error if token is invalid when subscribing to room", func(t *testing.T) {
-		server := httptest.NewServer(Router)
-		defer server.Close()
+			if tc.addRoom {
+				wsURL += "/room/" + uuid.New().String()
+			}
 
-		fakeID := uuid.New().String()
-		token := generateAuthToken(nil)
-		invalidToken := token[:len(token)-1]
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + fakeID + "?token=" + invalidToken
-		_, res, err := websocket.DefaultDialer.Dial(wsURL, nil)
+			_, res, err := websocket.DefaultDialer.Dial(wsURL, nil)
 
-		assertStatusCode(t, res, http.StatusUnauthorized)
+			body := parseResponseBody(t, res)
+			wantRes := "unauthorized, session not found or invalid\n"
+			wantErr := "websocket: bad handshake"
 
-		body := parseResponseBody(t, res)
-		wantRes := "token is unauthorized\n"
-		assertResponse(t, wantRes, string(body))
+			assert.Equal(t, res.StatusCode, http.StatusUnauthorized)
+			assert.Equal(t, wantRes, body)
+			assert.Equal(t, wantErr, err.Error())
+		})
 
-		wantErr := "websocket: bad handshake"
-		assertResponse(t, wantErr, err.Error())
-	})
+		t.Run("returns unauthorized error if cookie is different from the session", func(t *testing.T) {
+			wsURL := baseURL
 
-	t.Run("subscribes to room list", func(t *testing.T) {
-		// Create a test server
-		server := httptest.NewServer(Router)
-		defer server.Close()
+			if tc.addRoom {
+				wsURL += "/room/" + uuid.New().String()
+			}
 
-		// Connect to WebSocket
-		wsURL := "ws" + server.URL[4:] + "/subscribe?token=" + generateAuthToken(nil)
-		ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		if err != nil {
-			t.Fatalf("failed to connect to websocket: %v", err)
-		}
-		defer ws.Close()
-	})
+			_, res, err := connectWSWithoutSession(t, wsURL)
 
-	t.Run("returns token not found error if token is not found when subscribing to room list", func(t *testing.T) {
-		server := httptest.NewServer(Router)
-		defer server.Close()
+			body := parseResponseBody(t, res)
+			wantRes := "unauthorized, session not found or invalid\n"
+			wantErr := "websocket: bad handshake"
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe"
-		_, res, err := websocket.DefaultDialer.Dial(wsURL, nil)
-
-		assertStatusCode(t, res, http.StatusUnauthorized)
-
-		body := parseResponseBody(t, res)
-		wantRes := "no token found\n"
-		assertResponse(t, wantRes, string(body))
-
-		wantErr := "websocket: bad handshake"
-		assertResponse(t, wantErr, err.Error())
-	})
-
-	t.Run("returns authentication error if token is invalid when subscribing to room list", func(t *testing.T) {
-		server := httptest.NewServer(Router)
-		defer server.Close()
-
-		token := generateAuthToken(nil)
-		invalidToken := token[:len(token)-1]
-		wsURL := "ws" + server.URL[4:] + "/subscribe?token=" + invalidToken
-		_, res, err := websocket.DefaultDialer.Dial(wsURL, nil)
-
-		assertStatusCode(t, res, http.StatusUnauthorized)
-
-		body := parseResponseBody(t, res)
-		wantRes := "token is unauthorized\n"
-		assertResponse(t, wantRes, string(body))
-
-		wantErr := "websocket: bad handshake"
-		assertResponse(t, wantErr, err.Error())
-	})
-
+			assert.Equal(t, res.StatusCode, http.StatusUnauthorized)
+			assert.Equal(t, wantRes, body)
+			assert.Equal(t, wantErr, err.Error())
+		})
+	}
 }

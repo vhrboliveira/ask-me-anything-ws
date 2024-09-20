@@ -5,44 +5,54 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/go-chi/jwtauth/v5"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/gothic"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vhrboliveira/ama-go/internal/auth"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
 
-func generateAuthToken(userID *string) string {
-	var id uuid.UUID
-	if userID == nil {
-		userID = new(string)
-		*userID = uuid.New().String()
-	}
-	id, err := uuid.Parse(*userID)
-	if err != nil {
-		panic(err)
-	}
-
-	token, err := auth.GenerateJWT(id, "test@test.com")
-	if err != nil {
-		panic(err)
-	}
-
-	return token
-}
-
-func execRequest(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
+func execAuthenticatedRequest(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
 	t.Helper()
+
+	gothUser := mockGothUser()
+
+	gothic.GetProviderName = func(req *http.Request) (string, error) {
+		return "google", nil
+	}
+	gothic.CompleteUserAuth = func(w http.ResponseWriter, r *http.Request) (goth.User, error) {
+		return gothUser, nil
+	}
+
 	userID := generateUser(t)
 
-	token := "Bearer " + generateAuthToken(&userID)
+	callbackReq := httptest.NewRequest("GET", "/auth/google/callback", nil)
+	callbackRec := httptest.NewRecorder()
+
+	Router.ServeHTTP(callbackRec, callbackReq)
 
 	r := httptest.NewRequest(method, url, body)
-	r.Header.Set("Authorization", token)
+
+	rr := httptest.NewRecorder()
+
+	session, _ := gothic.Store.Get(r, auth.SessionName)
+	session.Values["sessionID"] = userID
+	session.Save(r, rr)
+
+	Router.ServeHTTP(rr, r)
+
+	return rr
+}
+
+func execRequestWithoutCookie(method, url string, body io.Reader) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(method, url, body)
 
 	rr := httptest.NewRecorder()
 
@@ -51,92 +61,134 @@ func execRequest(t testing.TB, method, url string, body io.Reader) *httptest.Res
 	return rr
 }
 
-func execRequestWithoutAuth(method, url string, body io.Reader) *httptest.ResponseRecorder {
+func execRequestWithInvalidCookie(method, url string, body io.Reader) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, url, body)
-
 	rr := httptest.NewRecorder()
+
+	session, _ := gothic.Store.Get(r, "different_cookie")
+	session.Values["sessionID"] = "any_id_on_the_session"
+	session.Save(r, rr)
 
 	Router.ServeHTTP(rr, r)
 
 	return rr
 }
 
-func execRequestWithInvalidAuth(method, url string, body io.Reader) *httptest.ResponseRecorder {
-	token := "Bearer " + generateAuthToken(nil)
-	token = token[:len(token)-1]
-
-	r := httptest.NewRequest(method, url, body)
-	r.Header.Set("Authorization", token)
-
-	rr := httptest.NewRecorder()
-
-	Router.ServeHTTP(rr, r)
-
-	return rr
-}
-
-func execRequestGeneratingToken(method, url string, body io.Reader, userID *string) *httptest.ResponseRecorder {
-	token := "Bearer " + generateAuthToken(userID)
-
-	r := httptest.NewRequest(method, url, body)
-	r.Header.Set("Authorization", token)
-
-	rr := httptest.NewRecorder()
-
-	Router.ServeHTTP(rr, r)
-
-	return rr
-}
-
-func assertStatusCode(t testing.TB, response *http.Response, expected int) {
+func execRequestGeneratingSession(t testing.TB, method, url string, body io.Reader, userID *string) *httptest.ResponseRecorder {
 	t.Helper()
-	if response.StatusCode != expected {
-		t.Errorf("Expected %d, Got: %d", expected, response.StatusCode)
+
+	gothUser := mockGothUser()
+	gothUser.UserID = *userID
+
+	gothic.GetProviderName = func(req *http.Request) (string, error) {
+		return "google", nil
 	}
-}
-
-func assertResponse(t testing.TB, want, got string) {
-	t.Helper()
-	if want != got {
-		t.Errorf("Expected %q, Got: %q", want, got)
+	gothic.CompleteUserAuth = func(w http.ResponseWriter, r *http.Request) (goth.User, error) {
+		return gothUser, nil
 	}
+
+	callbackReq := httptest.NewRequest("GET", "/auth/google/callback", nil)
+	callbackRec := httptest.NewRecorder()
+
+	Router.ServeHTTP(callbackRec, callbackReq)
+
+	r := httptest.NewRequest(method, url, body)
+	rr := httptest.NewRecorder()
+
+	session, _ := gothic.Store.Get(r, auth.SessionName)
+	session.Values["sessionID"] = *userID
+	session.Save(r, rr)
+
+	Router.ServeHTTP(rr, r)
+
+	return rr
 }
 
-func parseResponseBody(t testing.TB, response *http.Response) []byte {
+func connectAuthenticatedWS(t testing.TB, wsURL string) (*websocket.Conn, error) {
 	t.Helper()
+
+	userID := generateUser(t)
+	ws, _, err := connectWSWithUserSession(t, wsURL, &userID)
+	return ws, err
+}
+
+func connectWSWithUserSession(t testing.TB, wsURL string, userID *string) (*websocket.Conn, *http.Response, error) {
+	t.Helper()
+
+	gothUser := mockGothUser()
+	gothUser.UserID = *userID
+
+	gothic.GetProviderName = func(req *http.Request) (string, error) {
+		return "google", nil
+	}
+	gothic.CompleteUserAuth = func(w http.ResponseWriter, r *http.Request) (goth.User, error) {
+		return gothUser, nil
+	}
+
+	r := httptest.NewRequest("GET", "/auth/google/callback", nil)
+	rr := httptest.NewRecorder()
+
+	Router.ServeHTTP(rr, r)
+
+	response := rr.Result()
+	defer response.Body.Close()
+	values := response.Header.Values("Set-Cookie")
+
+	headers := http.Header{}
+	headers.Add("Cookie", values[0])
+
+	wsConn, res, err := websocket.DefaultDialer.Dial(wsURL, headers)
+
+	return wsConn, res, err
+}
+
+func connectWSWithoutSession(t testing.TB, wsURL string) (*websocket.Conn, *http.Response, error) {
+	t.Helper()
+
+	gothic.GetProviderName = func(req *http.Request) (string, error) {
+		return "google", nil
+	}
+	gothic.CompleteUserAuth = func(w http.ResponseWriter, r *http.Request) (goth.User, error) {
+		return mockGothUser(), nil
+	}
+
+	r := httptest.NewRequest("GET", "/auth/google/callback", nil)
+	rr := httptest.NewRecorder()
+
+	Router.ServeHTTP(rr, r)
+
+	headers := http.Header{}
+	headers.Add("Cookie", "invalidCookie")
+
+	wsConn, res, err := websocket.DefaultDialer.Dial(wsURL, headers)
+
+	return wsConn, res, err
+}
+
+func parseResponseBody(t testing.TB, response *http.Response) string {
+	t.Helper()
+
 	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("Failed to parse response body: %v", err)
-	}
+	require.NoError(t, err, "failed to parse response body")
 
-	return body
+	return string(body)
 }
 
 func assertValidUUID(t testing.TB, id string) {
 	t.Helper()
-	if _, err := uuid.Parse(id); err != nil {
-		t.Errorf("ID is not a valid UUID: %q. Error: %v", id, err)
-	}
+
+	_, err := uuid.Parse(id)
+	assert.NoError(t, err, "Expected valid UUID, got an error parsing it")
 }
 
 func assertValidDate(t testing.TB, date string) {
 	t.Helper()
-	if _, err := time.Parse(time.RFC3339, date); err != nil {
-		t.Errorf("Date is not a valid date with format YYYY-MM-DDTHH:mm:ssZ: %v", err)
-	}
+
+	_, err := time.Parse(time.RFC3339, date)
+	assert.NoError(t, err, "Date is not a valid date with format YYYY-MM-DDTHH:mm:ssZ")
 }
 
-func assertValidToken(t testing.TB, token string) {
-	t.Helper()
-	jwtSecret := os.Getenv("JWT_SECRET")
-	tokenAuth := jwtauth.New("HS256", []byte(jwtSecret), nil)
-	_, err := jwtauth.VerifyToken(tokenAuth, token)
-	if err != nil {
-		t.Fatalf("failed to parse token: %v", err)
-	}
-}
-
-func truncateTables(t testing.TB) {
+func truncateData(t testing.TB) {
 	t.Helper()
 
 	query := `
@@ -149,6 +201,8 @@ func truncateTables(t testing.TB) {
 	if err != nil {
 		t.Fatalf("Failed to truncate tables: %v", err)
 	}
+
+	ValkeyClient.Do(context.Background(), ValkeyClient.B().Flushall().Build())
 }
 
 func createRooms(t testing.TB, names []string) {
@@ -159,7 +213,7 @@ func createRooms(t testing.TB, names []string) {
 
 	tx, err := DBPool.Begin(ctx)
 	if err != nil {
-		t.Fatalf("Failed to create rooms: %v", err)
+		t.Fatalf("Failed to begin transaction to create rooms: %v", err)
 	}
 	defer tx.Rollback(ctx)
 
@@ -178,15 +232,15 @@ func createRooms(t testing.TB, names []string) {
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		t.Fatalf("Failed to create rooms: %v", err)
+		t.Fatalf("Failed to commit the transactions to create rooms: %v", err)
 	}
 }
 
-func getRoomByName(t testing.TB, name string) pgstore.GetRoomRow {
+func getRoomByName(t testing.TB, name string) pgstore.Room {
 	t.Helper()
 	ctx := context.Background()
 
-	rows, err := DBPool.Query(ctx, "SELECT id, name FROM rooms WHERE name = $1", name)
+	rows, err := DBPool.Query(ctx, "SELECT id, name, user_id FROM rooms WHERE name = $1", name)
 	if err != nil {
 		t.Fatalf("Failed to get room: %v", err)
 	}
@@ -196,8 +250,8 @@ func getRoomByName(t testing.TB, name string) pgstore.GetRoomRow {
 		t.Fatalf("Failed to get room: %v", err)
 	}
 
-	var room pgstore.GetRoomRow
-	err = rows.Scan(&room.ID, &room.Name)
+	var room pgstore.Room
+	err = rows.Scan(&room.ID, &room.Name, &room.UserID)
 	if err != nil {
 		t.Fatalf("Failed to scan room: %v", err)
 	}
@@ -205,7 +259,7 @@ func getRoomByName(t testing.TB, name string) pgstore.GetRoomRow {
 	return room
 }
 
-func createAndGetRoom(t testing.TB) pgstore.GetRoomRow {
+func createAndGetRoom(t testing.TB) pgstore.Room {
 	t.Helper()
 
 	roomName := []string{"room"}
@@ -248,10 +302,11 @@ func getMessageIDByMessage(t testing.TB, message string) string {
 
 	ctx := context.Background()
 
-	row := DBPool.QueryRow(ctx, "SELECT id FROM messages WHERE message = $1", message)
+	row := DBPool.QueryRow(ctx, "SELECT id, answered FROM messages WHERE message = $1", message)
 
 	var id uuid.UUID
-	err := row.Scan(&id)
+	var ans bool
+	err := row.Scan(&id, &ans)
 	if err != nil {
 		t.Fatalf("Failed to scan message: %v", err)
 	}
@@ -259,7 +314,7 @@ func getMessageIDByMessage(t testing.TB, message string) string {
 	return id.String()
 }
 
-func createAndGetMessages(t testing.TB, roomID uuid.UUID) string {
+func createAndGetMessages(t testing.TB, roomID uuid.UUID) (string, string) {
 	t.Helper()
 
 	msgs := []pgstore.InsertMessageParams{
@@ -270,7 +325,7 @@ func createAndGetMessages(t testing.TB, roomID uuid.UUID) string {
 	}
 
 	insertMessages(t, msgs)
-	return getMessageIDByMessage(t, msgs[0].Message)
+	return getMessageIDByMessage(t, msgs[0].Message), msgs[0].Message
 }
 
 func getMessageReactions(t testing.TB, messageID string) int {
@@ -300,148 +355,10 @@ func setMessageReaction(t testing.TB, messageID string, count int) {
 	}
 }
 
-func setRoomsConstraintFailure(t testing.TB) {
-	t.Helper()
-	ctx := context.Background()
-
-	t.Cleanup(func() {
-		_, err := DBPool.Exec(ctx, "ALTER TABLE old_rooms RENAME TO rooms;")
-		if err != nil {
-			t.Fatalf("Failed to remove constraint: %v", err)
-		}
-	})
-
-	_, err := DBPool.Exec(ctx, "ALTER TABLE rooms RENAME TO old_rooms;")
-	if err != nil {
-		t.Fatalf("Failed to add constraint: %v", err)
-	}
-}
-
-func setMessagesConstraintFailure(t testing.TB) {
-	t.Helper()
-	ctx := context.Background()
-
-	t.Cleanup(func() {
-		_, err := DBPool.Exec(ctx, "ALTER TABLE old_messages RENAME TO messages;")
-		if err != nil {
-			t.Fatalf("Failed to remove constraint: %v", err)
-		}
-	})
-
-	_, err := DBPool.Exec(ctx, "ALTER TABLE messages RENAME TO old_messages;")
-	if err != nil {
-		t.Fatalf("Failed to add constraint: %v", err)
-	}
-}
-
-func setUpdateMessageReactionConstraintFailure(t testing.TB, roomID uuid.UUID) {
+func getUserIDByEmail(t testing.TB, email string) string {
 	t.Helper()
 
 	ctx := context.Background()
-
-	t.Cleanup(func() {
-		_, err := DBPool.Exec(ctx, "ALTER TABLE messages DROP CONSTRAINT msg_chk_reaction_count;")
-		if err != nil {
-			t.Fatalf("Failed to remove constraint: %v", err)
-		}
-	})
-
-	_, err := DBPool.Exec(ctx, "ALTER TABLE messages ADD CONSTRAINT msg_chk_reaction_count UNIQUE(reaction_count);")
-	if err != nil {
-		t.Fatalf("Failed to set constraint: %v", err)
-	}
-
-	messages := []pgstore.InsertMessageParams{
-		{
-			RoomID:  roomID,
-			Message: "message test",
-		},
-	}
-
-	insertMessages(t, messages)
-
-	_, err = DBPool.Exec(ctx, "UPDATE messages SET reaction_count = 1")
-	if err != nil {
-		t.Fatalf("Failed to update constraint message: %v", err)
-	}
-}
-
-func setDeleteMessageReactionConstraintFailure(t testing.TB, roomID uuid.UUID, msgID string) {
-	t.Helper()
-
-	ctx := context.Background()
-
-	t.Cleanup(func() {
-		_, err := DBPool.Exec(ctx, "ALTER TABLE messages DROP CONSTRAINT msg_chk_reaction_count;")
-		if err != nil {
-			t.Fatalf("Failed to remove constraint: %v", err)
-		}
-	})
-
-	messages := []pgstore.InsertMessageParams{
-		{
-			RoomID:  roomID,
-			Message: "message test",
-		},
-	}
-	insertMessages(t, messages)
-
-	_, err := DBPool.Exec(ctx, "UPDATE messages SET reaction_count = 1 WHERE id != $1", msgID)
-	if err != nil {
-		t.Fatalf("Failed to update constraint message: %v", err)
-	}
-
-	setMessageReaction(t, msgID, 2)
-
-	_, err = DBPool.Exec(ctx, "ALTER TABLE messages ADD CONSTRAINT msg_chk_reaction_count UNIQUE(reaction_count);")
-	if err != nil {
-		t.Fatalf("Failed to set constraint: %v", err)
-	}
-}
-
-func setAnswerMessageConstraintFailure(t testing.TB, roomID uuid.UUID) {
-	t.Helper()
-
-	ctx := context.Background()
-
-	t.Cleanup(func() {
-		_, err := DBPool.Exec(ctx, "ALTER TABLE messages DROP CONSTRAINT msg_chk_answer;")
-		if err != nil {
-			t.Fatalf("Failed to remove constraint: %v", err)
-		}
-	})
-
-	_, err := DBPool.Exec(ctx, "ALTER TABLE messages ADD CONSTRAINT msg_chk_answer UNIQUE(answered);")
-	if err != nil {
-		t.Fatalf("Failed to set constraint: %v", err)
-	}
-
-	messages := []pgstore.InsertMessageParams{
-		{
-			RoomID:  roomID,
-			Message: "message test",
-		},
-	}
-
-	insertMessages(t, messages)
-
-	_, err = DBPool.Exec(ctx, "UPDATE messages SET answered = true")
-	if err != nil {
-		t.Fatalf("Failed to update constraint message: %v", err)
-	}
-}
-
-func generateUser(t testing.TB) string {
-	t.Helper()
-
-	email := uuid.New().String() + "@test.com"
-	password := uuid.New().String()
-	name := "test"
-
-	createUser(t, email, password, name)
-
-	ctx := context.Background()
-
 	user := DBPool.QueryRow(ctx, "SELECT id FROM users WHERE email = $1", email)
 	var id string
 	err := user.Scan(&id)
@@ -452,34 +369,27 @@ func generateUser(t testing.TB) string {
 	return id
 }
 
-func createUser(t testing.TB, email, password, name string) {
+func generateUser(t testing.TB) string {
+	t.Helper()
+
+	gothUser := mockGothUser()
+	email := gothUser.Email
+	name := gothUser.Name
+
+	createUser(t, email, name)
+
+	return getUserIDByEmail(t, email)
+}
+
+func createUser(t testing.TB, email, name string) {
 	t.Helper()
 
 	ctx := context.Background()
 
 	user := pgstore.CreateUserParams{
-		Email:        email,
-		PasswordHash: password,
-		Name:         name,
+		Email: email,
+		Name:  name,
 	}
 
-	DBPool.Exec(ctx, "INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3)", user.Email, user.PasswordHash, user.Name)
-}
-
-func setCreateUserConstraintError(t testing.TB) {
-	t.Helper()
-
-	ctx := context.Background()
-
-	t.Cleanup(func() {
-		_, err := DBPool.Exec(ctx, "ALTER TABLE users2 RENAME TO users;")
-		if err != nil {
-			t.Fatalf("Failed to remove constraint: %v", err)
-		}
-	})
-
-	_, err := DBPool.Exec(ctx, "ALTER TABLE users RENAME TO users2;")
-	if err != nil {
-		t.Fatalf("Failed to set constraint: %v", err)
-	}
+	DBPool.Exec(ctx, "INSERT INTO users (email, name) VALUES ($1, $2)", user.Email, user.Name)
 }

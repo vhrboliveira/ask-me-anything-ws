@@ -2,31 +2,33 @@ package api_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
-	"github.com/vhrboliveira/ama-go/internal/web"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	types "github.com/vhrboliveira/ama-go/internal/utils"
 )
 
 func TestCreateRoomMessages(t *testing.T) {
+	type customFn func(t testing.TB, method string, url string, body io.Reader) *httptest.ResponseRecorder
+
 	const (
-		url    = "/api/rooms/room_id/messages"
-		method = http.MethodPost
+		baseURL = "/api/rooms/room_id/messages"
+		method  = http.MethodPost
 	)
 
 	t.Run("create messages for a room", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
+		truncateData(t)
 
 		room := createAndGetRoom(t)
-		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
+		newURL := strings.Replace(baseURL, "room_id", room.ID.String(), 1)
 		payload := strings.NewReader(`{"message": "Is Go awesome?"}`)
-		rr := execRequest(t, method, newURL, payload)
+		rr := execAuthenticatedRequest(t, method, newURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -36,41 +38,31 @@ func TestCreateRoomMessages(t *testing.T) {
 			CreatedAt string `json:"created_at"`
 		}
 
-		assertStatusCode(t, response, http.StatusCreated)
+		err := json.NewDecoder(response.Body).Decode(&result)
+		require.NoError(t, err)
 
-		body := parseResponseBody(t, response)
-
-		if err := json.Unmarshal(body, &result); err != nil {
-			t.Errorf("Error to unmarshal body: %v", err)
-		}
-
+		assert.Equal(t, response.StatusCode, http.StatusCreated)
 		assertValidUUID(t, result.ID)
 		assertValidDate(t, result.CreatedAt)
 	})
 
 	t.Run("sends a message to the websocket subscribers when a message is created in a room", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
+		truncateData(t)
 
 		room := createAndGetRoom(t)
 
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + generateAuthToken(nil)
-		headers := http.Header{}
-		headers.Add("Authorization", "Bearer "+generateAuthToken(nil))
-		ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
-		if err != nil {
-			t.Fatalf("failed to connect to websocket: %v", err)
-		}
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String()
+		ws, err := connectAuthenticatedWS(t, wsURL)
+		require.NoError(t, err)
 		defer ws.Close()
 
 		want := "Is Go awesome?"
-		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
+		newURL := strings.Replace(baseURL, "room_id", room.ID.String(), 1)
 		payload := strings.NewReader(`{"message": "` + want + `"}`)
-		rr := execRequest(t, method, newURL, payload)
+		rr := execAuthenticatedRequest(t, method, newURL, payload)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -80,220 +72,149 @@ func TestCreateRoomMessages(t *testing.T) {
 			CreatedAt string `json:"created_at"`
 		}
 
-		assertStatusCode(t, response, http.StatusCreated)
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 
-		body := parseResponseBody(t, response)
-
-		if err := json.Unmarshal(body, &result); err != nil {
-			t.Fatalf("Error to unmarshal body: %v", err)
-		}
-
+		assert.Equal(t, response.StatusCode, http.StatusCreated)
 		assertValidUUID(t, result.ID)
 		assertValidDate(t, result.CreatedAt)
 
 		_, p, err := ws.ReadMessage()
-		if err != nil {
-			t.Fatalf("failed to read message from websocket: %v", err)
-		}
+		require.NoError(t, err)
 
-		var receivedMessage web.Message
-		var messageCreated web.MessageCreated
+		var receivedMessage types.Message
+		var messageCreated types.MessageCreated
 
-		if err := json.Unmarshal(p, &receivedMessage); err != nil {
-			t.Fatalf("failed to unmarshal received message: %v", err)
-		}
-
+		require.NoError(t, json.Unmarshal(p, &receivedMessage), "failed to unmarshal received message")
 		jsonBytes, err := json.Marshal(receivedMessage.Value)
-		if err != nil {
-			t.Fatalf("failed to marshal received message value: %v", err)
-		}
+		require.NoError(t, err, "failed to marshal received message value")
+		require.NoError(t, json.Unmarshal(jsonBytes, &messageCreated), "failed to unmarshal RoomCreated value")
 
-		if err := json.Unmarshal(jsonBytes, &messageCreated); err != nil {
-			t.Fatalf("failed to unmarshal RoomCreated value: %v", err)
-		}
-
-		assertResponse(t, receivedMessage.Kind, web.MessageKindMessageCreated)
-		assertResponse(t, messageCreated.ID, result.ID)
-		assertResponse(t, messageCreated.Message, want)
+		assert.Equal(t, receivedMessage.Kind, types.MessageKindMessageCreated)
+		assert.Equal(t, messageCreated.ID, result.ID)
+		assert.Equal(t, messageCreated.Message, want)
 		assertValidDate(t, messageCreated.CreatedAt)
 	})
 
-	t.Run("returns token not found error if token is not found", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
+	truncateData(t)
+	type constraintFn func(t *testing.T)
+	fakeID := uuid.New().String()
+	room := createAndGetRoom(t)
+
+	errorTestCases := []struct {
+		name               string
+		fn                 customFn
+		expectedMessage    string
+		expectedStatusCode int
+		url                string
+		payload            string
+		setConstraint      constraintFn
+	}{
+		{
+			name: "returns unauthorized error if sessionID is not found",
+			fn: func(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
+				return execRequestWithoutCookie(method, url, body)
+			},
+			expectedMessage:    "unauthorized, session not found or invalid\n",
+			expectedStatusCode: http.StatusUnauthorized,
+			url:                strings.Replace(baseURL, "room_id", fakeID, 1),
+			payload:            "",
+			setConstraint:      nil,
+		},
+		{
+			name: "returns unauthorized error if cookie is different from the session",
+			fn: func(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
+				return execRequestWithInvalidCookie(method, url, body)
+			},
+			expectedMessage:    "unauthorized, session not found or invalid\n",
+			expectedStatusCode: http.StatusUnauthorized,
+			url:                strings.Replace(baseURL, "room_id", fakeID, 1),
+			payload:            "",
+			setConstraint:      nil,
+		},
+		{
+			name:               "returns an error if room id is not valid",
+			fn:                 execAuthenticatedRequest,
+			expectedMessage:    "invalid room id\n",
+			expectedStatusCode: http.StatusBadRequest,
+			url:                baseURL,
+			payload:            "",
+			setConstraint:      nil,
+		},
+		{
+			name:               "returns an error if room does not exist",
+			fn:                 execAuthenticatedRequest,
+			expectedMessage:    "room not found\n",
+			expectedStatusCode: http.StatusBadRequest,
+			url:                strings.Replace(baseURL, "room_id", fakeID, 1),
+			payload:            `{"message": "Is Go awesome?"}`,
+			setConstraint:      nil,
+		},
+		{
+			name:               "returns an error if body is invalid",
+			fn:                 execAuthenticatedRequest,
+			expectedMessage:    "validation failed: missing required field(s): message\n",
+			expectedStatusCode: http.StatusBadRequest,
+			url:                strings.Replace(baseURL, "room_id", room.ID.String(), 1),
+			payload:            `{"invalid": "invalid"}`,
+			setConstraint:      nil,
+		},
+		{
+			name:               "returns an error if request body is not a valid json",
+			fn:                 execAuthenticatedRequest,
+			expectedMessage:    "invalid body\n",
+			expectedStatusCode: http.StatusBadRequest,
+			url:                strings.Replace(baseURL, "room_id", room.ID.String(), 1),
+			payload:            "aaaaaa",
+			setConstraint:      nil,
+		},
+		{
+			name:               "returns an error if payload provides multiples messages",
+			fn:                 execAuthenticatedRequest,
+			expectedMessage:    "invalid body\n",
+			expectedStatusCode: http.StatusBadRequest,
+			url:                strings.Replace(baseURL, "room_id", room.ID.String(), 1),
+			payload:            `[{"message": "a valid message"}, {"message": "another valid message"}]`,
+			setConstraint:      nil,
+		},
+		{
+			name:               "returns an error if fails to get room",
+			fn:                 execAuthenticatedRequest,
+			expectedMessage:    "error validating room ID\n",
+			expectedStatusCode: http.StatusInternalServerError,
+			url:                strings.Replace(baseURL, "room_id", fakeID, 1),
+			payload:            `{"message": "a valid message"}`,
+			setConstraint: func(t *testing.T) {
+				setRoomsConstraintFailure(t)
+			},
+		},
+		{
+			name:               "returns an error if fails to insert message",
+			fn:                 execAuthenticatedRequest,
+			expectedMessage:    "error inserting message\n",
+			expectedStatusCode: http.StatusInternalServerError,
+			url:                strings.Replace(baseURL, "room_id", room.ID.String(), 1),
+			payload:            `{"message": "a valid message"}`,
+			setConstraint: func(t *testing.T) {
+				setMessagesConstraintFailure(t)
+			},
+		},
+	}
+
+	for _, tc := range errorTestCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setConstraint != nil {
+				tc.setConstraint(t)
+			}
+
+			payload := strings.NewReader(tc.payload)
+			rr := tc.fn(t, method, tc.url, payload)
+			response := rr.Result()
+			defer response.Body.Close()
+
+			body := parseResponseBody(t, response)
+
+			assert.Equal(t, response.StatusCode, tc.expectedStatusCode)
+			assert.Equal(t, tc.expectedMessage, body)
 		})
-
-		fakeID := uuid.New().String()
-		newURL := strings.Replace(url, "room_id", fakeID, 1)
-		rr := execRequestWithoutAuth(http.MethodPatch, newURL, nil)
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusUnauthorized)
-
-		body := parseResponseBody(t, response)
-
-		want := "no token found\n"
-		assertResponse(t, want, string(body))
-	})
-
-	t.Run("returns authentication error if token is invalid", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
-
-		fakeID := uuid.New().String()
-		newURL := strings.Replace(url, "room_id", fakeID, 1)
-		rr := execRequestWithInvalidAuth(http.MethodPatch, newURL, nil)
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusUnauthorized)
-
-		body := parseResponseBody(t, response)
-
-		want := "token is unauthorized\n"
-		assertResponse(t, want, string(body))
-	})
-
-	t.Run("returns an error if room id is not valid", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
-
-		rr := execRequest(t, method, url, nil)
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusBadRequest)
-
-		body := parseResponseBody(t, response)
-
-		want := "invalid room id\n"
-		assertResponse(t, want, string(body))
-	})
-
-	t.Run("returns an error if room does not exist", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
-
-		fakeID := uuid.New().String()
-		newURL := strings.Replace(url, "room_id", fakeID, 1)
-		rr := execRequest(t, method, newURL, nil)
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusBadRequest)
-
-		body := parseResponseBody(t, response)
-
-		want := "room not found\n"
-		assertResponse(t, want, string(body))
-	})
-
-	t.Run("returns an error if fails to get room", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
-		setRoomsConstraintFailure(t)
-
-		fakeID := uuid.New().String()
-		newURL := strings.Replace(url, "room_id", fakeID, 1)
-		rr := execRequest(t, method, newURL, nil)
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusInternalServerError)
-
-		body := parseResponseBody(t, response)
-
-		want := "error getting room\n"
-		assertResponse(t, want, string(body))
-	})
-
-	t.Run("returns an error if body is invalid", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
-
-		room := createAndGetRoom(t)
-		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
-		payload := strings.NewReader(`{"invalid": "invalid"}`)
-		rr := execRequest(t, method, newURL, payload)
-
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusBadRequest)
-
-		body := parseResponseBody(t, response)
-
-		want := "validation failed: missing required field(s): message\n"
-		assertResponse(t, want, string(body))
-	})
-
-	t.Run("returns an error if request body is not a valid json", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
-
-		room := createAndGetRoom(t)
-		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
-		payload := strings.NewReader(`aaaaaa`)
-		rr := execRequest(t, method, newURL, payload)
-
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusBadRequest)
-
-		body := parseResponseBody(t, response)
-
-		want := "invalid body\n"
-		assertResponse(t, want, string(body))
-	})
-
-	t.Run("returns an error if payload provides multiples messages", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
-
-		room := createAndGetRoom(t)
-		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
-		payload := strings.NewReader(`[{"message": "a valid message"}, {"message": "another valid message"}]`)
-		rr := execRequest(t, method, newURL, payload)
-
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusBadRequest)
-
-		body := parseResponseBody(t, response)
-
-		want := "invalid body\n"
-		assertResponse(t, want, string(body))
-	})
-
-	t.Run("returns an error if fails to insert message", func(t *testing.T) {
-		t.Cleanup(func() {
-			truncateTables(t)
-		})
-		setMessagesConstraintFailure(t)
-
-		room := createAndGetRoom(t)
-		newURL := strings.Replace(url, "room_id", room.ID.String(), 1)
-		payload := strings.NewReader(`{"message": "a valid message"}`)
-		rr := execRequest(t, method, newURL, payload)
-
-		response := rr.Result()
-		defer response.Body.Close()
-
-		assertStatusCode(t, response, http.StatusInternalServerError)
-
-		body := parseResponseBody(t, response)
-
-		want := "error inserting message\n"
-		assertResponse(t, want, string(body))
-	})
+	}
 }

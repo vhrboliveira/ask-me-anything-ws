@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -9,567 +10,318 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
-	"github.com/vhrboliveira/ama-go/internal/web"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	types "github.com/vhrboliveira/ama-go/internal/utils"
 )
 
 func TestMessageReaction(t *testing.T) {
+	type customFn func(method string, url string, body io.Reader) *httptest.ResponseRecorder
+
 	const (
 		baseURL = "/api/rooms/"
 	)
 
-	t.Run("PATCH /api/rooms/{room_id}/messages/{message_id}/", func(t *testing.T) {
-		t.Run("adds a reaction to a message", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
+	t.Run("adds simultaneously multiple reactions to a message", func(t *testing.T) {
+		truncateData(t)
+
+		room := createAndGetRoom(t)
+		msgID, _ := createAndGetMessages(t, room.ID)
+		newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
+
+		var wg sync.WaitGroup
+		const requests = 50
+
+		wg.Add(requests)
+		for i := 0; i < requests; i++ {
+			go func() {
+				defer wg.Done()
+				rr := execAuthenticatedRequest(t, http.MethodPatch, newURL, nil)
+				response := rr.Result()
+				defer response.Body.Close()
+				assert.Equal(t, response.StatusCode, http.StatusOK)
+			}()
+		}
+		wg.Wait()
+
+		reactions := getMessageReactions(t, msgID)
+
+		assert.Equal(t, strconv.Itoa(reactions), strconv.Itoa(requests))
+	})
+
+	t.Run("does not remove a reaction from a message if there is no reaction", func(t *testing.T) {
+		truncateData(t)
+
+		room := createAndGetRoom(t)
+		msgID, _ := createAndGetMessages(t, room.ID)
+		newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
+		rr := execAuthenticatedRequest(t, http.MethodDelete, newURL, nil)
+		response := rr.Result()
+		defer response.Body.Close()
+
+		var result struct {
+			Count int `json:"count"`
+		}
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+
+		want := 0
+		assert.Equal(t, response.StatusCode, http.StatusOK)
+		assert.Equal(t, want, result.Count)
+	})
+
+	testCases := []struct {
+		customSuccessName string
+		customFailName    string
+		unauthorizedName  [2]string
+		unauthorizedFn    [2]customFn
+		method            string
+		expectedResult    string
+	}{
+		{
+			customSuccessName: "adds a reaction to the message",
+			customFailName:    "returns an error if fails to update message",
+			unauthorizedName: [2]string{
+				"returns unauthorized error if sessionID is not found",
+				"returns unauthorized error if cookie is different from the session",
+			},
+			unauthorizedFn: [2]customFn{
+				execRequestWithoutCookie,
+				execRequestWithInvalidCookie,
+			},
+			method:         http.MethodPatch,
+			expectedResult: "1",
+		},
+		{
+			customSuccessName: "removes a reaction from the message",
+			customFailName:    "returns an error if fails to remove reaction from message",
+			unauthorizedName: [2]string{
+				"returns unauthorized error if sessionID is not found",
+				"returns unauthorized error if cookie is different from the session",
+			},
+			unauthorizedFn: [2]customFn{
+				execRequestWithoutCookie,
+				execRequestWithInvalidCookie,
+			},
+			method:         http.MethodDelete,
+			expectedResult: "0",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.customSuccessName, func(t *testing.T) {
+			truncateData(t)
 
 			room := createAndGetRoom(t)
-			msgID := createAndGetMessages(t, room.ID)
+			msgID, _ := createAndGetMessages(t, room.ID)
+
+			if tc.method == http.MethodDelete {
+				count := 1
+				setMessageReaction(t, msgID, count)
+			}
+
 			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
-			rr := execRequest(t, http.MethodPatch, newURL, nil)
+
+			rr := execAuthenticatedRequest(t, tc.method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusOK)
-
-			body := parseResponseBody(t, response)
 
 			var result struct {
 				Count int `json:"count"`
 			}
-			if err := json.Unmarshal(body, &result); err != nil {
-				t.Errorf("Error to unmarshal body: %q. Error: %v", body, err)
-			}
-
-			want := "1"
-			assertResponse(t, want, strconv.Itoa(result.Count))
+			require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+			assert.Equal(t, response.StatusCode, http.StatusOK)
+			assert.Equal(t, tc.expectedResult, strconv.Itoa(result.Count))
 		})
 
-		t.Run("sends a message to the websocket subscribers when a reaction is added to a message", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
+		t.Run(tc.customFailName, func(t *testing.T) {
+			truncateData(t)
+
+			room := createAndGetRoom(t)
+			if tc.method == http.MethodPatch {
+				setUpdateMessageReactionConstraintFailure(t, room.ID)
+			}
+
+			msgID, _ := createAndGetMessages(t, room.ID)
+			if tc.method == http.MethodDelete {
+				setDeleteMessageReactionConstraintFailure(t, room.ID, msgID)
+			}
+			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
+
+			rr := execAuthenticatedRequest(t, tc.method, newURL, nil)
+			response := rr.Result()
+			defer response.Body.Close()
+
+			body := parseResponseBody(t, response)
+
+			want := "error reacting to message\n"
+			assert.Equal(t, response.StatusCode, http.StatusInternalServerError)
+			assert.Equal(t, want, body)
+		})
+
+		t.Run("sends a message to the websocket subscribers when a reaction", func(t *testing.T) {
+			truncateData(t)
 
 			room := createAndGetRoom(t)
 
 			server := httptest.NewServer(Router)
 			defer server.Close()
 
-			wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + generateAuthToken(nil)
-			headers := http.Header{}
-			headers.Add("Authorization", "Bearer "+generateAuthToken(nil))
-			ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
-			if err != nil {
-				t.Fatalf("failed to connect to websocket: %v", err)
-			}
+			wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String()
+			ws, err := connectAuthenticatedWS(t, wsURL)
+			require.NoError(t, err)
 			defer ws.Close()
 
-			msgID := createAndGetMessages(t, room.ID)
+			msgID, _ := createAndGetMessages(t, room.ID)
+
+			if tc.method == http.MethodDelete {
+				count := 1
+				setMessageReaction(t, msgID, count)
+			}
+
 			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
-			rr := execRequest(t, http.MethodPatch, newURL, nil)
+			rr := execAuthenticatedRequest(t, tc.method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusOK)
-
-			body := parseResponseBody(t, response)
 
 			var result struct {
 				Count int `json:"count"`
 			}
-			if err := json.Unmarshal(body, &result); err != nil {
-				t.Fatalf("Error to unmarshal body: %q. Error: %v", body, err)
-			}
-
-			want := "1"
-			assertResponse(t, want, strconv.Itoa(result.Count))
+			require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 
 			_, p, err := ws.ReadMessage()
-			if err != nil {
-				t.Fatalf("failed to read message from websocket: %v", err)
-			}
+			require.NoError(t, err)
 
-			var receivedMessage web.Message
-			var messageReactionAdded web.MessageReactionAdded
-			if err := json.Unmarshal(p, &receivedMessage); err != nil {
-				t.Fatalf("failed to unmarshal received message: %v", err)
-			}
+			var receivedMessage types.Message
+			var messageReactionAdded types.MessageReactionAdded
+			require.NoError(t, json.Unmarshal(p, &receivedMessage))
 
 			jsonBytes, err := json.Marshal(receivedMessage.Value)
-			if err != nil {
-				t.Fatalf("failed to marshal received message value: %v", err)
-			}
-			if err := json.Unmarshal(jsonBytes, &messageReactionAdded); err != nil {
-				t.Fatalf("failed to unmarshal MessageReactionAdded value: %v", err)
-			}
+			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(jsonBytes, &messageReactionAdded))
 
-			assertResponse(t, msgID, messageReactionAdded.ID)
-			assertResponse(t, "1", strconv.Itoa(int(messageReactionAdded.Count)))
+			assert.Equal(t, response.StatusCode, http.StatusOK)
+			assert.Equal(t, tc.expectedResult, strconv.Itoa(result.Count))
+			assert.Equal(t, msgID, messageReactionAdded.ID)
+			assert.Equal(t, tc.expectedResult, strconv.Itoa(int(messageReactionAdded.Count)))
 		})
 
-		t.Run("adds simultaneously multiple reactions to a message", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
+		for i, test := range tc.unauthorizedName {
+			t.Run(test, func(t *testing.T) {
+				t.Cleanup(func() {
+					truncateData(t)
+				})
+
+				fakeID := uuid.New().String()
+				newURL := baseURL + fakeID + "/messages/" + fakeID + "/react"
+
+				rr := tc.unauthorizedFn[i](tc.method, newURL, nil)
+				response := rr.Result()
+				defer response.Body.Close()
+
+				body := parseResponseBody(t, response)
+
+				want := "unauthorized, session not found or invalid\n"
+				assert.Equal(t, response.StatusCode, http.StatusUnauthorized)
+				assert.Equal(t, want, body)
 			})
-
-			room := createAndGetRoom(t)
-			msgID := createAndGetMessages(t, room.ID)
-			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
-
-			var wg sync.WaitGroup
-			const requests = 10
-
-			wg.Add(requests)
-			for i := 0; i < requests; i++ {
-				go func() {
-					defer wg.Done()
-					rr := execRequest(t, http.MethodPatch, newURL, nil)
-					response := rr.Result()
-					defer response.Body.Close()
-					assertStatusCode(t, response, http.StatusOK)
-				}()
-			}
-			wg.Wait()
-
-			reactions := getMessageReactions(t, msgID)
-
-			if reactions != requests {
-				t.Errorf("Expected %q reactions, got %q", requests, reactions)
-			}
-		})
-
-		t.Run("returns token not found error if token is not found", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			fakeID := uuid.New().String()
-			newURL := baseURL + fakeID + "/messages/" + fakeID + "/react"
-			rr := execRequestWithoutAuth(http.MethodPatch, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusUnauthorized)
-
-			body := parseResponseBody(t, response)
-
-			want := "no token found\n"
-			assertResponse(t, want, string(body))
-		})
-
-		t.Run("returns authentication error if token is invalid", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			fakeID := uuid.New().String()
-			newURL := baseURL + fakeID + "/messages/" + fakeID + "/react"
-			rr := execRequestWithInvalidAuth(http.MethodPatch, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusUnauthorized)
-
-			body := parseResponseBody(t, response)
-
-			want := "token is unauthorized\n"
-			assertResponse(t, want, string(body))
-		})
+		}
 
 		t.Run("returns an error if room id is not valid", func(t *testing.T) {
 			t.Cleanup(func() {
-				truncateTables(t)
+				truncateData(t)
 			})
 
 			fakeID := uuid.New().String()
 			newURL := baseURL + "invalid_room_id/messages/" + fakeID + "/react"
-			rr := execRequest(t, http.MethodPatch, newURL, nil)
+
+			rr := execAuthenticatedRequest(t, tc.method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusBadRequest)
 
 			body := parseResponseBody(t, response)
 
 			want := "invalid room id\n"
-			assertResponse(t, want, string(body))
+			assert.Equal(t, response.StatusCode, http.StatusBadRequest)
+			assert.Equal(t, want, body)
 		})
 
 		t.Run("returns an error if room does not exist", func(t *testing.T) {
 			t.Cleanup(func() {
-				truncateTables(t)
+				truncateData(t)
 			})
 
 			fakeID := uuid.New().String()
 			newURL := baseURL + fakeID + "/messages/" + fakeID + "/react"
-			rr := execRequest(t, http.MethodPatch, newURL, nil)
+
+			rr := execAuthenticatedRequest(t, tc.method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusBadRequest)
 
 			body := parseResponseBody(t, response)
 
 			want := "room not found\n"
-			assertResponse(t, want, string(body))
+			assert.Equal(t, response.StatusCode, http.StatusBadRequest)
+			assert.Equal(t, want, body)
 		})
 
 		t.Run("returns an error if message id is not valid", func(t *testing.T) {
 			t.Cleanup(func() {
-				truncateTables(t)
+				truncateData(t)
 			})
 
 			room := createAndGetRoom(t)
 			newURL := baseURL + room.ID.String() + "/messages/invalid_message_id/react"
-			rr := execRequest(t, http.MethodPatch, newURL, nil)
+
+			rr := execAuthenticatedRequest(t, tc.method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusBadRequest)
 
 			body := parseResponseBody(t, response)
 
 			want := "invalid message id\n"
-			assertResponse(t, want, string(body))
+			assert.Equal(t, response.StatusCode, http.StatusBadRequest)
+			assert.Equal(t, want, body)
 		})
 
 		t.Run("returns an error if message does not exist", func(t *testing.T) {
 			t.Cleanup(func() {
-				truncateTables(t)
+				truncateData(t)
 			})
 
 			room := createAndGetRoom(t)
 			fakeID := uuid.New().String()
 			newURL := baseURL + room.ID.String() + "/messages/" + fakeID + "/react"
-			rr := execRequest(t, http.MethodPatch, newURL, nil)
+
+			rr := execAuthenticatedRequest(t, tc.method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusNotFound)
 
 			body := parseResponseBody(t, response)
 
 			want := "message not found\n"
-			assertResponse(t, want, string(body))
+			assert.Equal(t, response.StatusCode, http.StatusBadRequest)
+			assert.Equal(t, want, body)
 		})
 
 		t.Run("returns an error if fails to get message", func(t *testing.T) {
 			t.Cleanup(func() {
-				truncateTables(t)
+				truncateData(t)
 			})
 			setMessagesConstraintFailure(t)
 
 			room := createAndGetRoom(t)
 			fakeID := uuid.New().String()
 			newURL := baseURL + room.ID.String() + "/messages/" + fakeID + "/react"
-			rr := execRequest(t, http.MethodPatch, newURL, nil)
+
+			rr := execAuthenticatedRequest(t, tc.method, newURL, nil)
 			response := rr.Result()
 			defer response.Body.Close()
 
-			assertStatusCode(t, response, http.StatusInternalServerError)
-
 			body := parseResponseBody(t, response)
 
-			want := "error getting message\n"
-			assertResponse(t, want, string(body))
+			want := "error validating message ID\n"
+			assert.Equal(t, response.StatusCode, http.StatusInternalServerError)
+			assert.Equal(t, want, body)
 		})
-
-		t.Run("returns an error if fails to update message", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-			room := createAndGetRoom(t)
-			setUpdateMessageReactionConstraintFailure(t, room.ID)
-
-			msgID := createAndGetMessages(t, room.ID)
-			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
-			rr := execRequest(t, http.MethodPatch, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusInternalServerError)
-
-			body := parseResponseBody(t, response)
-
-			want := "error reacting to message\n"
-			assertResponse(t, want, string(body))
-		})
-	})
-
-	t.Run("DELETE /api/rooms/{room_id}/messages/{message_id}/", func(t *testing.T) {
-		t.Run("removes a reaction to a message", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			room := createAndGetRoom(t)
-			msgID := createAndGetMessages(t, room.ID)
-			setMessageReaction(t, msgID, 1)
-			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
-			rr := execRequest(t, http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusOK)
-
-			body := parseResponseBody(t, response)
-
-			var result struct {
-				Count int `json:"count"`
-			}
-			if err := json.Unmarshal(body, &result); err != nil {
-				t.Errorf("Error to unmarshal body: %q. Error: %v", body, err)
-			}
-
-			want := "0"
-			assertResponse(t, want, strconv.Itoa(result.Count))
-		})
-
-		t.Run("sends a message to the websocket subscribers when a reaction is removed from a message", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			room := createAndGetRoom(t)
-
-			server := httptest.NewServer(Router)
-			defer server.Close()
-
-			wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String() + "?token=" + generateAuthToken(nil)
-			headers := http.Header{}
-			headers.Add("Authorization", "Bearer "+generateAuthToken(nil))
-			ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
-			if err != nil {
-				t.Fatalf("failed to connect to websocket: %v", err)
-			}
-			defer ws.Close()
-
-			msgID := createAndGetMessages(t, room.ID)
-			setMessageReaction(t, msgID, 1)
-			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
-			rr := execRequest(t, http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusOK)
-
-			body := parseResponseBody(t, response)
-
-			var result struct {
-				Count int `json:"count"`
-			}
-			if err := json.Unmarshal(body, &result); err != nil {
-				t.Fatalf("Error to unmarshal body: %q. Error: %v", body, err)
-			}
-
-			want := "0"
-			assertResponse(t, want, strconv.Itoa(result.Count))
-
-			_, p, err := ws.ReadMessage()
-			if err != nil {
-				t.Fatalf("failed to read message from websocket: %v", err)
-			}
-
-			var receivedMessage web.Message
-			var messageReactionAdded web.MessageReactionAdded
-			if err := json.Unmarshal(p, &receivedMessage); err != nil {
-				t.Fatalf("failed to unmarshal received message: %v", err)
-			}
-
-			jsonBytes, err := json.Marshal(receivedMessage.Value)
-			if err != nil {
-				t.Fatalf("failed to marshal received message value: %v", err)
-			}
-			if err := json.Unmarshal(jsonBytes, &messageReactionAdded); err != nil {
-				t.Fatalf("failed to unmarshal MessageReactionAdded value: %v", err)
-			}
-
-			assertResponse(t, msgID, messageReactionAdded.ID)
-			assertResponse(t, "0", strconv.Itoa(int(messageReactionAdded.Count)))
-		})
-
-		t.Run("does not remove a reaction from a message if there is no reaction", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			room := createAndGetRoom(t)
-			msgID := createAndGetMessages(t, room.ID)
-			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
-			rr := execRequest(t, http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusOK)
-
-			body := parseResponseBody(t, response)
-
-			var result struct {
-				Count int `json:"count"`
-			}
-			if err := json.Unmarshal(body, &result); err != nil {
-				t.Errorf("Error to unmarshal body: %q. Error: %v", body, err)
-			}
-
-			want := "0"
-			assertResponse(t, want, strconv.Itoa(result.Count))
-		})
-
-		t.Run("returns token not found error if token is not found", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			fakeID := uuid.New().String()
-			newURL := baseURL + fakeID + "/messages/" + fakeID + "/react"
-			rr := execRequestWithoutAuth(http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusUnauthorized)
-
-			body := parseResponseBody(t, response)
-
-			want := "no token found\n"
-			assertResponse(t, want, string(body))
-		})
-
-		t.Run("returns authentication error if token is invalid", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			fakeID := uuid.New().String()
-			newURL := baseURL + fakeID + "/messages/" + fakeID + "/react"
-			rr := execRequestWithInvalidAuth(http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusUnauthorized)
-
-			body := parseResponseBody(t, response)
-
-			want := "token is unauthorized\n"
-			assertResponse(t, want, string(body))
-		})
-
-		t.Run("returns an error if room id is not valid", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			fakeID := uuid.New().String()
-			newURL := baseURL + "invalid_room_id/messages/" + fakeID + "/react"
-			rr := execRequest(t, http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusBadRequest)
-
-			body := parseResponseBody(t, response)
-
-			want := "invalid room id\n"
-			assertResponse(t, want, string(body))
-		})
-
-		t.Run("returns an error if room does not exist", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			fakeID := uuid.New().String()
-			newURL := baseURL + fakeID + "/messages/" + fakeID + "/react"
-			rr := execRequest(t, http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusBadRequest)
-
-			body := parseResponseBody(t, response)
-
-			want := "room not found\n"
-			assertResponse(t, want, string(body))
-		})
-
-		t.Run("returns an error if message id is not valid", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			room := createAndGetRoom(t)
-			newURL := baseURL + room.ID.String() + "/messages/invalid_message_id/react"
-			rr := execRequest(t, http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusBadRequest)
-
-			body := parseResponseBody(t, response)
-
-			want := "invalid message id\n"
-			assertResponse(t, want, string(body))
-		})
-
-		t.Run("returns an error if message does not exist", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-
-			room := createAndGetRoom(t)
-			fakeID := uuid.New().String()
-			newURL := baseURL + room.ID.String() + "/messages/" + fakeID + "/react"
-			rr := execRequest(t, http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusNotFound)
-
-			body := parseResponseBody(t, response)
-
-			want := "message not found\n"
-			assertResponse(t, want, string(body))
-		})
-
-		t.Run("returns an error if fails to get message", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-			setMessagesConstraintFailure(t)
-
-			room := createAndGetRoom(t)
-			fakeID := uuid.New().String()
-			newURL := baseURL + room.ID.String() + "/messages/" + fakeID + "/react"
-			rr := execRequest(t, http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusInternalServerError)
-
-			body := parseResponseBody(t, response)
-
-			want := "error getting message\n"
-			assertResponse(t, want, string(body))
-		})
-
-		t.Run("returns an error if fails to remove reaction from message", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateTables(t)
-			})
-			room := createAndGetRoom(t)
-			msgID := createAndGetMessages(t, room.ID)
-			setDeleteMessageReactionConstraintFailure(t, room.ID, msgID)
-			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
-			rr := execRequest(t, http.MethodDelete, newURL, nil)
-			response := rr.Result()
-			defer response.Body.Close()
-
-			assertStatusCode(t, response, http.StatusInternalServerError)
-
-			body := parseResponseBody(t, response)
-
-			want := "error reacting to message\n"
-			assertResponse(t, want, string(body))
-		})
-	})
+	}
 }

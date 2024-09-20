@@ -13,9 +13,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/valkey-io/valkey-go"
 
-	"github.com/vhrboliveira/ama-go/internal/auth"
 	"github.com/vhrboliveira/ama-go/internal/router"
+	"github.com/vhrboliveira/ama-go/internal/service"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 	"github.com/vhrboliveira/ama-go/internal/web"
 )
@@ -23,6 +24,7 @@ import (
 var DBPool *pgxpool.Pool
 var Handler *web.Handlers
 var Router *chi.Mux
+var ValkeyClient valkey.Client
 
 func TestMain(m *testing.M) {
 	setup()
@@ -42,8 +44,6 @@ func setup() {
 	if err = godotenv.Load(".env.test"); err != nil {
 		panic("Error loading .env.test file")
 	}
-
-	auth.InitJWT(os.Getenv("JWT_SECRET"))
 
 	// Start Docker Compose
 	if err = exec.Command(
@@ -71,8 +71,25 @@ func setup() {
 		panic("Failed to run migrations:" + err.Error())
 	}
 
-	Handler = web.NewHandler(pgstore.New(DBPool))
-	Router = router.SetupRouter(Handler)
+	VALKEY_ENDPOINT := os.Getenv("VALKEY_ENDPOINT")
+	if VALKEY_ENDPOINT == "" {
+		panic("VALKEY_ENDPOINT is not set")
+	}
+	ValkeyClient, err = valkey.NewClient(valkey.ClientOption{
+		InitAddress: []string{VALKEY_ENDPOINT},
+	})
+	if err != nil {
+		slog.Error("Failed to initialize Valkey client", "error", err)
+		panic(err)
+	}
+
+	q := pgstore.New(DBPool)
+	roomService := service.NewRoomService(q)
+	messageService := service.NewMessageService(q)
+	userService := service.NewUserService(q)
+	wsService := service.NewWebSocketService()
+	Handler = web.NewHandler(roomService, messageService, wsService)
+	Router = router.SetupRouter(Handler, userService, &ValkeyClient)
 }
 
 func teardown() {
