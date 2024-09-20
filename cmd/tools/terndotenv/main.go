@@ -2,15 +2,23 @@ package main
 
 import (
 	"log/slog"
+	"os"
 	"os/exec"
 
 	"github.com/joho/godotenv"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		slog.Error("error loading .env file.")
-		panic(err)
+	env := os.Getenv("GO_ENV")
+	if env == "" {
+		env = "dev"
+	}
+
+	if env != "production" {
+		if err := godotenv.Load(); err != nil {
+			slog.Error("error loading .env file.")
+			panic(err)
+		}
 	}
 
 	cmd := exec.Command(
