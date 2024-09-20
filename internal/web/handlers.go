@@ -3,41 +3,44 @@ package web
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator"
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/vhrboliveira/ama-go/internal/auth"
+	"github.com/vhrboliveira/ama-go/internal/service"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
-	"golang.org/x/crypto/bcrypt"
+	types "github.com/vhrboliveira/ama-go/internal/utils"
 )
 
 type Handlers struct {
-	Queries              *pgstore.Queries
-	Router               *chi.Mux
-	Upgrader             websocket.Upgrader
-	RoomSubscribers      map[string]map[*websocket.Conn]context.CancelFunc
-	RoomsListSubscribers map[*websocket.Conn]context.CancelFunc
-	Mutex                *sync.RWMutex
+	Router           *chi.Mux
+	RoomService      *service.RoomService
+	MessageService   *service.MessageService
+	WebsocketService *service.WebSocketService
 }
 
-func NewHandler(q *pgstore.Queries) *Handlers {
+func sendJSON(w http.ResponseWriter, rawData any) {
+	data, _ := json.Marshal(rawData)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
+func NewHandler(
+	roomService *service.RoomService,
+	messageService *service.MessageService,
+	websocketService *service.WebSocketService,
+) *Handlers {
 	return &Handlers{
-		Queries:              q,
-		Router:               chi.NewRouter(),
-		Upgrader:             websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
-		RoomSubscribers:      make(map[string]map[*websocket.Conn]context.CancelFunc),
-		RoomsListSubscribers: make(map[*websocket.Conn]context.CancelFunc),
-		Mutex:                &sync.RWMutex{},
+		Router:           chi.NewRouter(),
+		RoomService:      roomService,
+		MessageService:   messageService,
+		WebsocketService: websocketService,
 	}
 }
 
@@ -87,24 +90,20 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenUserID, err := auth.GetUserIDFromToken(r.Context())
-	if err != nil {
-		slog.Error("error getting user id from token", "error", err)
-		http.Error(w, "error getting user id from token", http.StatusInternalServerError)
+	sessionUserID, ok := r.Context().Value(auth.UserIDKey).(string)
+	if !ok {
+		slog.Error("user ID not found on the session cookie")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	if tokenUserID != userID {
-		slog.Error("user id does not match", "token user id", tokenUserID, "body user id", userID)
+	if sessionUserID != body.UserID {
+		slog.Error("the provided user ID is different from the session")
 		http.Error(w, "invalid user id", http.StatusForbidden)
 		return
 	}
 
-	room, err := h.Queries.InsertRoom(r.Context(), pgstore.InsertRoomParams{
-		Name:   body.Name,
-		UserID: userID,
-	})
-
+	room, err := h.RoomService.CreateRoom(r.Context(), body.Name, userID)
 	if err != nil {
 		slog.Error("error creating room", "error", err)
 		http.Error(w, "error creating room", http.StatusInternalServerError)
@@ -117,15 +116,17 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		CreatedAt string `json:"created_at"`
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	sendJSON(w, response{ID: room.ID.String(), UserID: userID.String(), CreatedAt: room.CreatedAt.Time.Format(time.RFC3339)})
+	createdAt := room.CreatedAt.Time.Format(time.RFC3339)
 
-	go h.notifyRoomsListClients(Message{
-		Kind:   MessageKindRoomCreated,
+	w.WriteHeader(http.StatusCreated)
+	sendJSON(w, response{ID: room.ID.String(), UserID: userID.String(), CreatedAt: createdAt})
+
+	go h.WebsocketService.NotifyRoomsListClients(types.Message{
+		Kind:   types.MessageKindRoomCreated,
 		RoomID: room.ID.String(),
-		Value: RoomCreated{
+		Value: types.RoomCreated{
 			ID:        room.ID.String(),
-			CreatedAt: room.CreatedAt.Time.Format(time.RFC3339),
+			CreatedAt: createdAt,
 			Name:      body.Name,
 			UserID:    userID.String(),
 		},
@@ -133,34 +134,60 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetRooms(w http.ResponseWriter, r *http.Request) {
-	rooms, err := h.Queries.GetRooms(r.Context())
+	rooms, err := h.RoomService.GetRooms(r.Context())
 	if err != nil {
 		slog.Error("error getting rooms list", "error", err)
 		http.Error(w, "error getting rooms list", http.StatusInternalServerError)
 		return
 	}
 
-	if rooms == nil {
-		rooms = []pgstore.GetRoomsRow{}
-	}
-
 	sendJSON(w, rooms)
 }
 
-func (h *Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
-	_, rawRoomID, roomID, ok := h.readRoom(w, r)
-	if !ok {
+func (h *Handlers) GetRoom(w http.ResponseWriter, r *http.Request) {
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
+	if err != nil {
+		slog.Error("invalid room id", "error", err)
+		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
 	}
 
+	room, err := h.RoomService.GetRoom(r.Context(), roomID)
+	if err != nil {
+		slog.Error("error getting room", "error", err)
+		http.Error(w, "error getting room", http.StatusInternalServerError)
+		return
+	}
+
+	if room == (pgstore.GetRoomWithUserRow{}) {
+		http.Error(w, "room not found", http.StatusNotFound)
+		return
+	}
+
+	sendJSON(w, room)
+}
+
+func (h *Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
 	type roomMessageRequestBody struct {
 		Message string `json:"message" validate:"required"`
 	}
 
+	type response struct {
+		ID        string `json:"id"`
+		CreatedAt string `json:"created_at"`
+	}
+
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
+	if err != nil {
+		http.Error(w, "invalid room id", http.StatusBadRequest)
+		return
+	}
+
 	var body roomMessageRequestBody
 	validate := validator.New()
-
-	err := json.NewDecoder(r.Body).Decode(&body)
+	err = json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
@@ -173,55 +200,60 @@ func (h *Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message, err := h.Queries.InsertMessage(r.Context(), pgstore.InsertMessageParams{
-		RoomID:  roomID,
-		Message: body.Message,
-	})
+	ctx := r.Context()
+	status, err := h.RoomService.CheckRoomExists(ctx, roomID)
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return
+	}
 
+	message, err := h.MessageService.CreateMessage(ctx, roomID, body.Message)
 	if err != nil {
 		slog.Error("error inserting message", "error", err)
 		http.Error(w, "error inserting message", http.StatusInternalServerError)
 		return
 	}
 
-	type response struct {
-		ID        string `json:"id"`
-		CreatedAt string `json:"created_at"`
-	}
-
 	w.WriteHeader(http.StatusCreated)
 	sendJSON(w, response{ID: message.ID.String(), CreatedAt: message.CreatedAt.Time.Format(time.RFC3339)})
 
-	go h.notifyRoomClient(Message{
-		Kind:   MessageKindMessageCreated,
-		Value:  MessageCreated{ID: message.ID.String(), CreatedAt: message.CreatedAt.Time.Format(time.RFC3339), Message: body.Message},
+	go h.WebsocketService.NotifyRoomClient(types.Message{
+		Kind:   types.MessageKindMessageCreated,
+		Value:  types.MessageCreated{ID: message.ID.String(), CreatedAt: message.CreatedAt.Time.Format(time.RFC3339), Message: body.Message},
 		RoomID: rawRoomID,
 	})
 }
 
 func (h *Handlers) GetRoomMessages(w http.ResponseWriter, r *http.Request) {
-	_, _, roomID, ok := h.readRoom(w, r)
-	if !ok {
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
+	if err != nil {
+		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
 	}
 
-	roomMessages, err := h.Queries.GetRoomMessages(r.Context(), roomID)
+	ctx := r.Context()
+	status, err := h.RoomService.CheckRoomExists(ctx, roomID)
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	roomMessages, err := h.MessageService.GetMessages(ctx, roomID)
 	if err != nil {
 		slog.Error("error getting room messages", "error", err)
 		http.Error(w, "error getting room messages", http.StatusInternalServerError)
 		return
 	}
 
-	if roomMessages == nil {
-		roomMessages = []pgstore.GetRoomMessagesRow{}
-	}
-
 	sendJSON(w, roomMessages)
 }
 
 func (h *Handlers) GetRoomMessage(w http.ResponseWriter, r *http.Request) {
-	_, _, _, ok := h.readRoom(w, r)
-	if !ok {
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
+	if err != nil {
+		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
 	}
 
@@ -233,16 +265,22 @@ func (h *Handlers) GetRoomMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message, err := h.Queries.GetMessage(r.Context(), messageID)
+	ctx := r.Context()
+	status, err := h.RoomService.CheckRoomExists(ctx, roomID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Error("message not found", "error", err)
-			http.Error(w, "message not found", http.StatusNotFound)
-			return
-		}
+		http.Error(w, err.Error(), status)
+		return
+	}
 
+	message, err := h.MessageService.GetMessage(ctx, messageID)
+	if err != nil {
 		slog.Error("error getting message", "error", err)
 		http.Error(w, "error getting message", http.StatusInternalServerError)
+		return
+	}
+
+	if message == (pgstore.Message{}) {
+		http.Error(w, "message not found", http.StatusNotFound)
 		return
 	}
 
@@ -250,8 +288,14 @@ func (h *Handlers) GetRoomMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
-	_, rawRoomID, _, ok := h.readRoom(w, r)
-	if !ok {
+	type response struct {
+		Count int32 `json:"count"`
+	}
+
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
+	if err != nil {
+		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
 	}
 
@@ -263,36 +307,32 @@ func (h *Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.Queries.GetMessage(r.Context(), messageID)
+	ctx := r.Context()
+	status, err := h.RoomService.CheckRoomExists(ctx, roomID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Error("message not found", "error", err)
-			http.Error(w, "message not found", http.StatusNotFound)
-			return
-		}
-
-		slog.Error("error getting message", "error", err)
-		http.Error(w, "error getting message", http.StatusInternalServerError)
+		http.Error(w, err.Error(), status)
 		return
 	}
 
-	count, err := h.Queries.ReactToMessage(r.Context(), messageID)
+	status, err = h.MessageService.CheckMessageExists(ctx, messageID)
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	count, err := h.MessageService.ReactToMessage(ctx, messageID)
 	if err != nil {
 		slog.Error("error reacting to message", "error", err)
 		http.Error(w, "error reacting to message", http.StatusInternalServerError)
 		return
 	}
 
-	type response struct {
-		Count int32 `json:"count"`
-	}
-
 	sendJSON(w, response{Count: count})
 
-	go h.notifyRoomClient(Message{
-		Kind:   MessageKindMessageReactionAdd,
+	go h.WebsocketService.NotifyRoomClient(types.Message{
+		Kind:   types.MessageKindMessageReactionAdd,
 		RoomID: rawRoomID,
-		Value: MessageReactionAdded{
+		Value: types.MessageReactionAdded{
 			ID:    rawMessageID,
 			Count: count,
 		},
@@ -300,8 +340,14 @@ func (h *Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Request) {
-	_, rawRoomID, _, ok := h.readRoom(w, r)
-	if !ok {
+	type response struct {
+		Count int32 `json:"count"`
+	}
+
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
+	if err != nil {
+		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
 	}
 
@@ -313,40 +359,31 @@ func (h *Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	_, err = h.Queries.GetMessage(r.Context(), messageID)
+	ctx := r.Context()
+	status, err := h.RoomService.CheckRoomExists(ctx, roomID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Error("message not found", "error", err)
-			http.Error(w, "message not found", http.StatusNotFound)
-			return
-		}
-
-		slog.Error("error getting message", "error", err)
-		http.Error(w, "error getting message", http.StatusInternalServerError)
+		http.Error(w, err.Error(), status)
 		return
 	}
 
-	count, err := h.Queries.RemoveReactionFromMessage(r.Context(), messageID)
+	status, err = h.MessageService.CheckMessageExists(ctx, messageID)
 	if err != nil {
-		count = 0
-
-		if !errors.Is(err, pgx.ErrNoRows) {
-			slog.Error("error reacting to message", "error", err)
-			http.Error(w, "error reacting to message", http.StatusInternalServerError)
-			return
-		}
+		http.Error(w, err.Error(), status)
+		return
 	}
 
-	type response struct {
-		Count int32 `json:"count"`
+	count, err := h.MessageService.RemoveReactionFromMessage(ctx, messageID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	sendJSON(w, response{Count: count})
 
-	go h.notifyRoomClient(Message{
-		Kind:   MessageKindMessageReactionRemoved,
+	go h.WebsocketService.NotifyRoomClient(types.Message{
+		Kind:   types.MessageKindMessageReactionRemoved,
 		RoomID: rawRoomID,
-		Value: MessageReactionRemoved{
+		Value: types.MessageReactionRemoved{
 			ID:    rawMessageID,
 			Count: count,
 		},
@@ -354,8 +391,10 @@ func (h *Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) {
-	_, rawRoomID, _, ok := h.readRoom(w, r)
-	if !ok {
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
+	if err != nil {
+		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
 	}
 
@@ -367,20 +406,20 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, err = h.Queries.GetMessage(r.Context(), messageID)
+	ctx := r.Context()
+	status, err := h.RoomService.CheckRoomExists(ctx, roomID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Error("message not found", "error", err)
-			http.Error(w, "message not found", http.StatusNotFound)
-			return
-		}
-
-		slog.Error("error getting message", "error", err)
-		http.Error(w, "error getting message", http.StatusInternalServerError)
+		http.Error(w, err.Error(), status)
 		return
 	}
 
-	err = h.Queries.MarkMessageAsAnswered(r.Context(), messageID)
+	status, err = h.MessageService.CheckMessageExists(ctx, messageID)
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	err = h.MessageService.MarkMessageAsAnswered(ctx, messageID)
 	if err != nil {
 		slog.Error("error setting message to answered", "error", err)
 		http.Error(w, "error setting message to answered", http.StatusInternalServerError)
@@ -389,185 +428,53 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 
 	w.WriteHeader(http.StatusOK)
 
-	go h.notifyRoomClient(Message{
-		Kind:   MessageKindMessageAnswered,
+	go h.WebsocketService.NotifyRoomClient(types.Message{
+		Kind:   types.MessageKindMessageAnswered,
 		RoomID: rawRoomID,
-		Value: MessageAnswered{
+		Value: types.MessageAnswered{
 			ID: rawMessageID,
 		},
 	})
 }
 
-func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
-	type requestBody struct {
-		Email    string `json:"email" validate:"required,email"`
-		Password string `json:"password" validate:"required,min=12"`
-		Name     string `json:"name" validate:"required"`
-		Bio      string `json:"bio"`
-	}
-
-	var body requestBody
-	validate := validator.New()
-
-	err := json.NewDecoder(r.Body).Decode(&body)
+func (h *Handlers) SubscribeToRoom(w http.ResponseWriter, r *http.Request) {
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
 	if err != nil {
-		slog.Error("failed to decode body", "error", err)
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
 	}
 
-	if err := validate.Struct(&body); err != nil {
-		slog.Error("validation failed", "error", err)
-
-		missingFields := []string{}
-		for _, err := range err.(validator.ValidationErrors) {
-			if err.Tag() == "required" {
-				missingFields = append(missingFields, err.Field())
-			}
-
-			if err.Tag() == "email" && err.Field() == "Email" {
-				http.Error(w, "validation failed: Email must be a valid email address", http.StatusBadRequest)
-				return
-			}
-
-			if err.Tag() == "min" && err.Field() == "Password" {
-				http.Error(w, "validation failed: Password must be at least 12 characters", http.StatusBadRequest)
-				return
-			}
-		}
-
-		http.Error(w, "validation failed, missing required field(s): "+strings.Join(missingFields, ", "), http.StatusBadRequest)
-		return
-	}
-
-	bytePassword := []byte(body.Password)
-	hashedPassword, err := bcrypt.GenerateFromPassword(bytePassword, bcrypt.DefaultCost)
+	ctx := r.Context()
+	status, err := h.RoomService.CheckRoomExists(ctx, roomID)
 	if err != nil {
-		slog.Error("failed to hash password", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		http.Error(w, err.Error(), status)
 		return
 	}
 
-	user, err := h.Queries.CreateUser(r.Context(), pgstore.CreateUserParams{
-		Email:        body.Email,
-		PasswordHash: string(hashedPassword),
-		Name:         body.Name,
-		Bio:          body.Bio,
-	})
+	c, err := h.WebsocketService.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
-			slog.Error("user already exists", "error", err)
-			http.Error(w, "user already exists", http.StatusBadRequest)
-			return
-		}
-		slog.Error("error creating user", "error", err)
-		http.Error(w, "error creating user", http.StatusInternalServerError)
+		slog.Error("failed to upgrade connection", "error", err)
+		http.Error(w, "failed to connect to ws connection", http.StatusBadRequest)
 		return
 	}
 
-	token, err := auth.GenerateJWT(user.ID, user.Email)
-	if err != nil {
-		slog.Error("failed to generate token", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
+	defer c.Close()
 
-	type response struct {
-		ID        string `json:"id"`
-		Email     string `json:"email"`
-		Name      string `json:"name"`
-		Bio       string `json:"bio"`
-		CreatedAt string `json:"created_at"`
-		Token     string `json:"token"`
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	sendJSON(w, response{
-		ID:        user.ID.String(),
-		Email:     user.Email,
-		Name:      user.Name,
-		Bio:       user.Bio,
-		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
-		Token:     token,
-	})
+	ctx, cancel := context.WithCancel(r.Context())
+	h.WebsocketService.SubscribeToRoom(c, ctx, cancel, rawRoomID, r.RemoteAddr)
 }
 
-func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
-	type requestBody struct {
-		Email    string `json:"email" validate:"required,email"`
-		Password string `json:"password" validate:"required"`
-	}
-
-	var body requestBody
-	validate := validator.New()
-
-	err := json.NewDecoder(r.Body).Decode(&body)
+func (h Handlers) SubscribeToRoomsList(w http.ResponseWriter, r *http.Request) {
+	c, err := h.WebsocketService.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		slog.Error("failed to decode body", "error", err)
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		slog.Warn("failed to upgrade connection", "error", err)
+		http.Error(w, "failed to connect to ws connection", http.StatusBadRequest)
 		return
 	}
 
-	if err := validate.Struct(&body); err != nil {
-		slog.Error("validation failed", "error", err)
+	defer c.Close()
 
-		missingFields := []string{}
-		for _, err := range err.(validator.ValidationErrors) {
-			if err.Tag() == "required" {
-				missingFields = append(missingFields, err.Field())
-			}
-
-			if err.Tag() == "email" && err.Field() == "Email" {
-				http.Error(w, "validation failed: Email must be a valid email address", http.StatusBadRequest)
-				return
-			}
-		}
-
-		http.Error(w, "validation failed, missing required field(s): "+strings.Join(missingFields, ", "), http.StatusBadRequest)
-		return
-	}
-
-	user, err := h.Queries.GetUserByEmail(r.Context(), body.Email)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Error("user not found", "error", err)
-			http.Error(w, "invalid credentials", http.StatusUnauthorized)
-			return
-		}
-		slog.Error("error getting user", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(body.Password))
-	if err != nil {
-		slog.Error("invalid password", "error", err)
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
-		return
-	}
-
-	token, err := auth.GenerateJWT(user.ID, user.Email)
-	if err != nil {
-		slog.Error("failed to generate token", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	type response struct {
-		ID        string `json:"id"`
-		Email     string `json:"email"`
-		Name      string `json:"name"`
-		Bio       string `json:"bio"`
-		CreatedAt string `json:"created_at"`
-		Token     string `json:"token"`
-	}
-
-	sendJSON(w, response{
-		ID:        user.ID.String(),
-		Email:     user.Email,
-		Name:      user.Name,
-		Bio:       user.Bio,
-		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
-		Token:     token,
-	})
+	ctx, cancel := context.WithCancel(r.Context())
+	h.WebsocketService.SubscribeToRoomsList(c, ctx, cancel, r.RemoteAddr)
 }

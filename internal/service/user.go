@@ -1,0 +1,78 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
+)
+
+type UserService struct {
+	q *pgstore.Queries
+}
+
+func NewUserService(q *pgstore.Queries) *UserService {
+	return &UserService{
+		q: q,
+	}
+}
+
+func (u *UserService) GetUserByEmail(ctx context.Context, email string) (pgstore.User, error) {
+	user, err := u.q.GetUserByEmail(ctx, email)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("user not found, creating user", "error", err)
+			return pgstore.User{}, nil
+		}
+
+		slog.Error("error getting user", "error", err)
+		return pgstore.User{}, errors.New("error getting user")
+	}
+
+	return user, nil
+
+}
+
+func (u *UserService) GetUserByID(ctx context.Context, id string) (pgstore.User, error) {
+	userId, err := uuid.Parse(id)
+	if err != nil {
+		slog.Error("failed to parse user ID", "error", err)
+		return pgstore.User{}, err
+	}
+
+	user, err := u.q.GetUserById(ctx, userId)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("user not found, creating user", "error", err)
+			return pgstore.User{}, errors.New("no user found")
+		}
+
+		slog.Error("error getting user", "error", err)
+		return pgstore.User{}, errors.New("error getting user")
+	}
+
+	return user, nil
+}
+
+func (u *UserService) CreateUser(ctx context.Context, user pgstore.User) (uuid.UUID, error) {
+	dbUser := pgstore.CreateUserParams{
+		Email:          user.Email,
+		Name:           user.Name,
+		AvatarUrl:      user.AvatarUrl,
+		Provider:       user.Provider,
+		ProviderUserID: user.ProviderUserID,
+	}
+
+	creteUserRow, err := u.q.CreateUser(ctx, dbUser)
+	if err != nil {
+		slog.Error("error creating user", "error", err)
+		return uuid.Nil, errors.New("error creating user")
+	}
+
+	return creteUserRow.ID, nil
+}
