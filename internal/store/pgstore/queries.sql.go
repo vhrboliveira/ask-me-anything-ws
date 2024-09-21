@@ -66,7 +66,7 @@ func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (Message, error)
 }
 
 const getRoom = `-- name: GetRoom :one
-SELECT id, name, created_at, updated_at, user_id FROM rooms WHERE id = $1
+SELECT id, name, created_at, updated_at, user_id, description FROM rooms WHERE id = $1
 `
 
 func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (Room, error) {
@@ -78,6 +78,7 @@ func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (Room, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserID,
+		&i.Description,
 	)
 	return i, err
 }
@@ -116,7 +117,7 @@ func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]Mess
 
 const getRoomWithUser = `-- name: GetRoomWithUser :one
 SELECT
-  r."id", r."name", r."created_at", u."email", u."name" as "creator_name", u."avatar_url", u."enable_picture"
+  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."avatar_url", u."enable_picture"
 FROM rooms r
 LEFT JOIN users u ON r.user_id = u.id
 WHERE r.id = $1
@@ -125,7 +126,9 @@ WHERE r.id = $1
 type GetRoomWithUserRow struct {
 	ID            uuid.UUID        `db:"id" json:"id"`
 	Name          string           `db:"name" json:"name"`
+	Description   string           `db:"description" json:"description"`
 	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 	Email         pgtype.Text      `db:"email" json:"email"`
 	CreatorName   pgtype.Text      `db:"creator_name" json:"creator_name"`
 	AvatarUrl     pgtype.Text      `db:"avatar_url" json:"avatar_url"`
@@ -138,7 +141,9 @@ func (q *Queries) GetRoomWithUser(ctx context.Context, id uuid.UUID) (GetRoomWit
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Description,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 		&i.Email,
 		&i.CreatorName,
 		&i.AvatarUrl,
@@ -148,7 +153,7 @@ func (q *Queries) GetRoomWithUser(ctx context.Context, id uuid.UUID) (GetRoomWit
 }
 
 const getRooms = `-- name: GetRooms :many
-SELECT id, name, created_at, updated_at, user_id FROM rooms ORDER BY created_at ASC
+SELECT id, name, created_at, updated_at, user_id, description FROM rooms ORDER BY created_at ASC
 `
 
 func (q *Queries) GetRooms(ctx context.Context) ([]Room, error) {
@@ -166,6 +171,7 @@ func (q *Queries) GetRooms(ctx context.Context) ([]Room, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UserID,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -247,14 +253,15 @@ func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (I
 
 const insertRoom = `-- name: InsertRoom :one
 INSERT INTO rooms
-  ("name", "user_id") VALUES
-  ($1, $2)
+  ("name", "user_id", "description") VALUES
+  ($1, $2, $3)
 RETURNING "id", "created_at"
 `
 
 type InsertRoomParams struct {
-	Name   string    `db:"name" json:"name"`
-	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Name        string    `db:"name" json:"name"`
+	UserID      uuid.UUID `db:"user_id" json:"user_id"`
+	Description string    `db:"description" json:"description"`
 }
 
 type InsertRoomRow struct {
@@ -263,7 +270,7 @@ type InsertRoomRow struct {
 }
 
 func (q *Queries) InsertRoom(ctx context.Context, arg InsertRoomParams) (InsertRoomRow, error) {
-	row := q.db.QueryRow(ctx, insertRoom, arg.Name, arg.UserID)
+	row := q.db.QueryRow(ctx, insertRoom, arg.Name, arg.UserID, arg.Description)
 	var i InsertRoomRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err

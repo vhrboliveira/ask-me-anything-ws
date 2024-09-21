@@ -3,7 +3,7 @@ SELECT * FROM rooms WHERE id = $1;
 
 -- name: GetRoomWithUser :one
 SELECT
-  r."id", r."name", r."created_at", u."email", u."name" as "creator_name", u."avatar_url", u."enable_picture"
+  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."avatar_url", u."enable_picture"
 FROM rooms r
 LEFT JOIN users u ON r.user_id = u.id
 WHERE r.id = $1;
@@ -13,8 +13,8 @@ SELECT * FROM rooms ORDER BY created_at ASC;
 
 -- name: InsertRoom :one
 INSERT INTO rooms
-  ("name", "user_id") VALUES
-  ($1, $2)
+  ("name", "user_id", "description") VALUES
+  ($1, $2, $3)
 RETURNING "id", "created_at";
 
 -- name: GetMessage :one
