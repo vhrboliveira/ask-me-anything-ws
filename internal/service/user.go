@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
 
@@ -59,7 +60,7 @@ func (u *UserService) GetUserByID(ctx context.Context, id string) (pgstore.User,
 	return user, nil
 }
 
-func (u *UserService) CreateUser(ctx context.Context, user pgstore.User) (uuid.UUID, error) {
+func (u *UserService) CreateUser(ctx context.Context, user pgstore.User) (userID uuid.UUID, createdAt pgtype.Timestamp, updatedAt pgtype.Timestamp, err error) {
 	dbUser := pgstore.CreateUserParams{
 		Email:          user.Email,
 		Name:           user.Name,
@@ -68,11 +69,15 @@ func (u *UserService) CreateUser(ctx context.Context, user pgstore.User) (uuid.U
 		ProviderUserID: user.ProviderUserID,
 	}
 
-	creteUserRow, err := u.q.CreateUser(ctx, dbUser)
+	createUserRow, err := u.q.CreateUser(ctx, dbUser)
 	if err != nil {
 		slog.Error("error creating user", "error", err)
-		return uuid.Nil, errors.New("error creating user")
+		return uuid.Nil, pgtype.Timestamp{}, pgtype.Timestamp{}, errors.New("error creating user")
 	}
 
-	return creteUserRow.ID, nil
+	userID = createUserRow.ID
+	createdAt = createUserRow.CreatedAt
+	updatedAt = createUserRow.UpdatedAt
+
+	return userID, createdAt, updatedAt, err
 }

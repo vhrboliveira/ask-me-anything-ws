@@ -1,7 +1,6 @@
 package router
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 
@@ -52,6 +51,8 @@ func SetupRouter(h *web.Handlers, userService *service.UserService, valkeyClient
 		})
 
 		router.Route("/api", func(router chi.Router) {
+			router.Get("/user", h.GetUserInfo)
+
 			router.Route("/rooms", func(router chi.Router) {
 				router.Post("/", h.CreateRoom)
 				router.Get("/", h.GetRooms)

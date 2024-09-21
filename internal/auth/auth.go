@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
@@ -30,7 +31,7 @@ import (
 
 type contextKey string
 
-const UserIDKey contextKey = "user_id"
+const UserKey contextKey = "user"
 
 const (
 	SessionName      = "ama_session"
@@ -45,15 +46,8 @@ var (
 	UserService *service.UserService
 )
 
-type SessionAuthUser struct {
-	ID        string `db:"id" json:"id"`
-	Email     string `db:"email" json:"email"`
-	Name      string `db:"name" json:"name"`
-	AvatarUrl string `db:"avatar_url" json:"avatar_url"`
-}
-
 func AuthInit(valkeyClient *valkey.Client, userService *service.UserService) {
-	gob.Register(SessionAuthUser{})
+	gob.Register(pgstore.User{})
 
 	store = sessions.NewCookieStore([]byte(os.Getenv("COOKIE_SECRET")))
 	store.Options = &sessions.Options{
@@ -165,21 +159,21 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		var userSessionValues SessionAuthUser
+		var userSessionValues pgstore.User
 		err = gob.NewDecoder(bytes.NewBuffer(decryptedSession)).Decode(&userSessionValues)
 		if err != nil {
-			slog.Error("Failed to deserialize user data", "error", err)
+			slog.Error("failed to deserialize user data", "error", err)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		if userSessionValues.ID == "" {
+		if userSessionValues == (pgstore.User{}) || userSessionValues.ID == uuid.Nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		// Set userID in request context
-		ctx = context.WithValue(r.Context(), UserIDKey, userSessionValues.ID)
+		ctx = context.WithValue(r.Context(), UserKey, userSessionValues)
 		r = r.WithContext(ctx)
 
 		next.ServeHTTP(w, r)
@@ -230,44 +224,41 @@ func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 			AvatarUrl:      oauthUser.AvatarURL,
 			Provider:       provider,
 			ProviderUserID: oauthUser.UserID,
+			EnablePicture:  false,
+			NewUser:        true,
 		}
 
-		userID, err := UserService.CreateUser(r.Context(), dbUser)
+		userID, createdAt, updatedAt, err := UserService.CreateUser(r.Context(), dbUser)
 		if err != nil {
 			http.Error(w, "Error authenticating", http.StatusInternalServerError)
 			return
 		}
 
 		dbUser.ID = userID
+		dbUser.CreatedAt = createdAt
+		dbUser.UpdatedAt = updatedAt
 	}
 
 	session.Values["sessionID"] = dbUser.ID.String()
 	err = session.Save(r, w)
 	if err != nil {
-		slog.Error("Failed to save session", "error", err)
-		http.Error(w, "Error authenticating", http.StatusInternalServerError)
+		slog.Error("failed to save session", "error", err)
+		http.Error(w, "error authenticating", http.StatusInternalServerError)
 		return
 	}
 
-	newUser := SessionAuthUser{
-		ID:        dbUser.ID.String(),
-		Email:     dbUser.Email,
-		Name:      dbUser.Name,
-		AvatarUrl: dbUser.AvatarUrl,
-	}
-
 	var buf bytes.Buffer
-	err = gob.NewEncoder(&buf).Encode(&newUser)
+	err = gob.NewEncoder(&buf).Encode(&dbUser)
 	if err != nil {
-		slog.Error("Failed to serialize user data", "error", err)
-		http.Error(w, "Error authenticating", http.StatusInternalServerError)
+		slog.Error("failed to serialize user data", "error", err)
+		http.Error(w, "error authenticating", http.StatusInternalServerError)
 		return
 	}
 
 	encryptedSession, err := encrypt(buf.Bytes())
 	if err != nil {
-		slog.Error("Failed to encrypt session", "error", err)
-		http.Error(w, "Error authenticating", http.StatusInternalServerError)
+		slog.Error("failed to encrypt session", "error", err)
+		http.Error(w, "error authenticating", http.StatusInternalServerError)
 		return
 	}
 
@@ -275,8 +266,8 @@ func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 	sessionID := session.Values["sessionID"].(string)
 	result := cache.Do(ctx, cache.B().Set().Key(sessionID).Value(string(encryptedSession)).Ex(oneDayInDuration).Build())
 	if result.Error() != nil {
-		slog.Error("Failed to store session", "error", result.Error())
-		http.Error(w, "Error authenticating", http.StatusInternalServerError)
+		slog.Error("failed to store session", "error", result.Error())
+		http.Error(w, "error authenticating", http.StatusInternalServerError)
 		return
 	}
 

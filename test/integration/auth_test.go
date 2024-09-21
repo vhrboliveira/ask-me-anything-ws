@@ -13,14 +13,40 @@ import (
 	"github.com/markbates/goth/providers/google"
 	"github.com/stretchr/testify/assert"
 	"github.com/vhrboliveira/ama-go/internal/auth"
+	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
 
-func mockGothUser() goth.User {
+func mockGothUser(u *pgstore.User) goth.User {
+	userID := uuid.New().String()
+	name := "Test User"
+	email := "test@example.com"
+	avatarURL := "http://avatar.com/test.jpg"
+	provider := "google"
+
+	if u != nil {
+		if u.ID != uuid.Nil {
+			userID = u.ID.String()
+		}
+		if u.Name != "" {
+			name = u.Name
+		}
+		if u.Email != "" {
+			email = u.Email
+		}
+		if u.AvatarUrl != "" {
+			avatarURL = u.AvatarUrl
+		}
+		if u.Provider != "" {
+			provider = u.Provider
+		}
+	}
+
 	return goth.User{
-		UserID:    uuid.New().String(),
-		Name:      "Test User",
-		Email:     "test@example.com",
-		AvatarURL: "http://avatar.com/test.jpg",
+		UserID:    userID,
+		Name:      name,
+		Email:     email,
+		AvatarURL: avatarURL,
+		Provider:  provider,
 	}
 }
 
@@ -46,8 +72,13 @@ func TestCallbackHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			truncateData(t)
 
-			userMock := mockGothUser()
-			createUser(t, userMock.Email, userMock.Email)
+			userMock := mockGothUser(nil)
+			userMock.Provider = "google"
+			providerUserID := "1234567890"
+			userMock.AvatarURL = "http://avatar.com/test.jpg"
+			createUser(t,
+				userMock.Email, userMock.Name, userMock.Provider, providerUserID, userMock.AvatarURL,
+			)
 
 			goth.UseProviders(tc.gothProvider)
 
@@ -70,7 +101,7 @@ func TestCallbackHandler(t *testing.T) {
 func TestLogoutHandler(t *testing.T) {
 	truncateData(t)
 
-	userMock := mockGothUser()
+	userMock := mockGothUser(nil)
 
 	req := httptest.NewRequest("GET", "/logout", nil)
 	rr := httptest.NewRecorder()

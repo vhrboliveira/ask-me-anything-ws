@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	types "github.com/vhrboliveira/ama-go/internal/utils"
 )
 
@@ -207,9 +208,7 @@ func TestMessageReaction(t *testing.T) {
 
 		for i, test := range tc.unauthorizedName {
 			t.Run(test, func(t *testing.T) {
-				t.Cleanup(func() {
-					truncateData(t)
-				})
+				truncateData(t)
 
 				fakeID := uuid.New().String()
 				newURL := baseURL + fakeID + "/messages/" + fakeID + "/react"
@@ -227,9 +226,7 @@ func TestMessageReaction(t *testing.T) {
 		}
 
 		t.Run("returns an error if room id is not valid", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateData(t)
-			})
+			truncateData(t)
 
 			fakeID := uuid.New().String()
 			newURL := baseURL + "invalid_room_id/messages/" + fakeID + "/react"
@@ -246,9 +243,7 @@ func TestMessageReaction(t *testing.T) {
 		})
 
 		t.Run("returns an error if room does not exist", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateData(t)
-			})
+			truncateData(t)
 
 			fakeID := uuid.New().String()
 			newURL := baseURL + fakeID + "/messages/" + fakeID + "/react"
@@ -265,9 +260,7 @@ func TestMessageReaction(t *testing.T) {
 		})
 
 		t.Run("returns an error if message id is not valid", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateData(t)
-			})
+			truncateData(t)
 
 			room := createAndGetRoom(t)
 			newURL := baseURL + room.ID.String() + "/messages/invalid_message_id/react"
@@ -284,9 +277,7 @@ func TestMessageReaction(t *testing.T) {
 		})
 
 		t.Run("returns an error if message does not exist", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateData(t)
-			})
+			truncateData(t)
 
 			room := createAndGetRoom(t)
 			fakeID := uuid.New().String()
@@ -304,9 +295,7 @@ func TestMessageReaction(t *testing.T) {
 		})
 
 		t.Run("returns an error if fails to get message", func(t *testing.T) {
-			t.Cleanup(func() {
-				truncateData(t)
-			})
+			truncateData(t)
 			setMessagesConstraintFailure(t)
 
 			room := createAndGetRoom(t)

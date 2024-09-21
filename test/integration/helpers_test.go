@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ import (
 func execAuthenticatedRequest(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
 	t.Helper()
 
-	gothUser := mockGothUser()
+	gothUser := mockGothUser(nil)
 
 	gothic.GetProviderName = func(req *http.Request) (string, error) {
 		return "google", nil
@@ -74,11 +75,10 @@ func execRequestWithInvalidCookie(method, url string, body io.Reader) *httptest.
 	return rr
 }
 
-func execRequestGeneratingSession(t testing.TB, method, url string, body io.Reader, userID *string) *httptest.ResponseRecorder {
+func execRequestGeneratingSession(t testing.TB, method, url string, body io.Reader, user *pgstore.User) *httptest.ResponseRecorder {
 	t.Helper()
 
-	gothUser := mockGothUser()
-	gothUser.UserID = *userID
+	gothUser := mockGothUser(user)
 
 	gothic.GetProviderName = func(req *http.Request) (string, error) {
 		return "google", nil
@@ -96,7 +96,7 @@ func execRequestGeneratingSession(t testing.TB, method, url string, body io.Read
 	rr := httptest.NewRecorder()
 
 	session, _ := gothic.Store.Get(r, auth.SessionName)
-	session.Values["sessionID"] = *userID
+	session.Values["sessionID"] = gothUser.UserID
 	session.Save(r, rr)
 
 	Router.ServeHTTP(rr, r)
@@ -115,7 +115,7 @@ func connectAuthenticatedWS(t testing.TB, wsURL string) (*websocket.Conn, error)
 func connectWSWithUserSession(t testing.TB, wsURL string, userID *string) (*websocket.Conn, *http.Response, error) {
 	t.Helper()
 
-	gothUser := mockGothUser()
+	gothUser := mockGothUser(nil)
 	gothUser.UserID = *userID
 
 	gothic.GetProviderName = func(req *http.Request) (string, error) {
@@ -149,7 +149,7 @@ func connectWSWithoutSession(t testing.TB, wsURL string) (*websocket.Conn, *http
 		return "google", nil
 	}
 	gothic.CompleteUserAuth = func(w http.ResponseWriter, r *http.Request) (goth.User, error) {
-		return mockGothUser(), nil
+		return mockGothUser(nil), nil
 	}
 
 	r := httptest.NewRequest("GET", "/auth/google/callback", nil)
@@ -363,7 +363,9 @@ func getUserIDByEmail(t testing.TB, email string) string {
 	var id string
 	err := user.Scan(&id)
 	if err != nil {
-		t.Fatalf("Failed to scan user: %v", err)
+		if !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatalf("Failed to scan user: %v", err)
+		}
 	}
 
 	return id
@@ -372,24 +374,43 @@ func getUserIDByEmail(t testing.TB, email string) string {
 func generateUser(t testing.TB) string {
 	t.Helper()
 
-	gothUser := mockGothUser()
+	gothUser := mockGothUser(nil)
 	email := gothUser.Email
 	name := gothUser.Name
+	gothUser.Provider = "google"
+	providerUserID := "1234567890"
+	gothUser.AvatarURL = "http://avatar.com/test.jpg"
 
-	createUser(t, email, name)
+	id := getUserIDByEmail(t, email)
+	if id == "" {
+		id = createUser(t, email, name, gothUser.Provider, providerUserID, gothUser.AvatarURL)
+	}
 
-	return getUserIDByEmail(t, email)
+	return id
 }
 
-func createUser(t testing.TB, email, name string) {
+func createUser(t testing.TB, email, name, provider, providerUserId, avatarURL string) string {
 	t.Helper()
 
 	ctx := context.Background()
 
 	user := pgstore.CreateUserParams{
-		Email: email,
-		Name:  name,
+		Email:          email,
+		Name:           name,
+		Provider:       provider,
+		ProviderUserID: providerUserId,
+		AvatarUrl:      avatarURL,
 	}
 
-	DBPool.Exec(ctx, "INSERT INTO users (email, name) VALUES ($1, $2)", user.Email, user.Name)
+	insertQuery := "INSERT INTO users (email, name, provider, provider_user_id, avatar_url) VALUES ($1, $2, $3, $4, $5) returning id"
+	row := DBPool.QueryRow(
+		ctx,
+		insertQuery,
+		user.Email, user.Name, user.Provider, user.ProviderUserID, user.AvatarUrl,
+	)
+
+	var id uuid.UUID
+	require.NoError(t, row.Scan(&id))
+
+	return id.String()
 }

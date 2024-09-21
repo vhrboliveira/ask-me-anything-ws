@@ -90,14 +90,14 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionUserID, ok := r.Context().Value(auth.UserIDKey).(string)
+	user, ok := r.Context().Value(auth.UserKey).(pgstore.User)
 	if !ok {
-		slog.Error("user ID not found on the session cookie")
+		slog.Error("user not found on the session cookie")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	if sessionUserID != body.UserID {
+	if user.ID.String() != body.UserID {
 		slog.Error("the provided user ID is different from the session")
 		http.Error(w, "invalid user id", http.StatusForbidden)
 		return
@@ -435,6 +435,17 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 			ID: rawMessageID,
 		},
 	})
+}
+
+func (h *Handlers) GetUserInfo(w http.ResponseWriter, r *http.Request) {
+	rawUser := r.Context().Value(auth.UserKey)
+	user, ok := rawUser.(pgstore.User)
+	if !ok {
+		http.Error(w, "User not found", http.StatusInternalServerError)
+		return
+	}
+
+	sendJSON(w, user)
 }
 
 func (h *Handlers) SubscribeToRoom(w http.ResponseWriter, r *http.Request) {

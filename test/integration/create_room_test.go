@@ -11,11 +11,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 	types "github.com/vhrboliveira/ama-go/internal/utils"
 )
 
 func TestCreateRoom(t *testing.T) {
-	type customFn func(t testing.TB, method string, url string, body io.Reader, userID *string) *httptest.ResponseRecorder
+	type customFn func(t testing.TB, method string, url string, body io.Reader, user *pgstore.User) *httptest.ResponseRecorder
 
 	const (
 		url    = "/api/rooms"
@@ -27,8 +28,10 @@ func TestCreateRoom(t *testing.T) {
 
 		roomName := "Learning Go"
 		userID := generateUser(t)
+		parsedUserID, _ := uuid.Parse(userID)
+		user := pgstore.User{ID: parsedUserID}
 		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `"}`)
-		rr := execRequestGeneratingSession(t, method, url, payload, &userID)
+		rr := execRequestGeneratingSession(t, method, url, payload, &user)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -37,6 +40,7 @@ func TestCreateRoom(t *testing.T) {
 			ID        string `json:"id"`
 			UserID    string `json:"user_id"`
 			CreatedAt string `json:"created_at"`
+			UpdatedAt string `json:"updated_at"`
 		}
 
 		require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
@@ -54,6 +58,8 @@ func TestCreateRoom(t *testing.T) {
 		defer server.Close()
 
 		userID := generateUser(t)
+		parsedUserID, _ := uuid.Parse(userID)
+		user := pgstore.User{ID: parsedUserID}
 
 		wsURL := "ws" + server.URL[4:] + "/subscribe"
 		ws, _, err := connectWSWithUserSession(t, wsURL, &userID)
@@ -62,7 +68,7 @@ func TestCreateRoom(t *testing.T) {
 
 		roomName := "Learning Go"
 		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `"}`)
-		rr := execRequestGeneratingSession(t, method, url, payload, &userID)
+		rr := execRequestGeneratingSession(t, method, url, payload, &user)
 
 		response := rr.Result()
 		defer response.Body.Close()
@@ -97,9 +103,12 @@ func TestCreateRoom(t *testing.T) {
 		assert.Equal(t, roomCreated.UserID, userID)
 	})
 
+	truncateData(t)
 	roomName := "Learning Go"
 	roomName2 := "Learning Rust"
 	userID := generateUser(t)
+	parsedUserID, _ := uuid.Parse(userID)
+	user := pgstore.User{ID: parsedUserID}
 	invalidUserID := uuid.New().String()
 
 	errorTestCases := []struct {
@@ -120,7 +129,7 @@ func TestCreateRoom(t *testing.T) {
 		},
 		{
 			name: "returns unauthorized error if sessionID is not found",
-			fn: func(t testing.TB, method string, url string, body io.Reader, userID *string) *httptest.ResponseRecorder {
+			fn: func(t testing.TB, method string, url string, body io.Reader, user *pgstore.User) *httptest.ResponseRecorder {
 				return execRequestWithoutCookie(method, url, body)
 			},
 			expectedMessage:    "unauthorized, session not found or invalid\n",
@@ -130,7 +139,7 @@ func TestCreateRoom(t *testing.T) {
 		},
 		{
 			name: "returns unauthorized error if cookie is different from the session",
-			fn: func(t testing.TB, method string, url string, body io.Reader, userID *string) *httptest.ResponseRecorder {
+			fn: func(t testing.TB, method string, url string, body io.Reader, user *pgstore.User) *httptest.ResponseRecorder {
 				return execRequestWithInvalidCookie(method, url, body)
 			},
 			expectedMessage:    "unauthorized, session not found or invalid\n",
@@ -196,7 +205,7 @@ func TestCreateRoom(t *testing.T) {
 				setRoomsConstraintFailure(t)
 			}
 
-			rr := tc.fn(t, method, url, payload, &userID)
+			rr := tc.fn(t, method, url, payload, &user)
 			response := rr.Result()
 			defer response.Body.Close()
 

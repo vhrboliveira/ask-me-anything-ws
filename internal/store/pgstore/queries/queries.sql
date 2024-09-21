@@ -57,7 +57,7 @@ WHERE
 INSERT INTO users
   ("email", "name", "provider", "provider_user_id", "avatar_url") VALUES
   ($1, $2, $3, $4, $5)
-RETURNING "id", "created_at";
+RETURNING "id", "created_at", "updated_at";
 
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE email = $1 LIMIT 1;

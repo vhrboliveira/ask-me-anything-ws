@@ -16,7 +16,7 @@ const createUser = `-- name: CreateUser :one
 INSERT INTO users
   ("email", "name", "provider", "provider_user_id", "avatar_url") VALUES
   ($1, $2, $3, $4, $5)
-RETURNING "id", "created_at"
+RETURNING "id", "created_at", "updated_at"
 `
 
 type CreateUserParams struct {
@@ -30,6 +30,7 @@ type CreateUserParams struct {
 type CreateUserRow struct {
 	ID        uuid.UUID        `db:"id" json:"id"`
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
@@ -41,7 +42,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		arg.AvatarUrl,
 	)
 	var i CreateUserRow
-	err := row.Scan(&i.ID, &i.CreatedAt)
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.UpdatedAt)
 	return i, err
 }
 
