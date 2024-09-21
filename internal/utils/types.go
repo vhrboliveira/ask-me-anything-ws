@@ -35,8 +35,9 @@ type Message struct {
 }
 
 type RoomCreated struct {
-	ID        string `json:"id"`
-	CreatedAt string `json:"created_at"`
-	Name      string `json:"name"`
-	UserID    string `json:"user_id"`
+	ID          string `json:"id"`
+	CreatedAt   string `json:"created_at"`
+	Name        string `json:"name"`
+	UserID      string `json:"user_id"`
+	Description string `json:"description"`
 }

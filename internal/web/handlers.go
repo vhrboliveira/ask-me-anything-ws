@@ -50,8 +50,9 @@ func (h *Handlers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	type requestBody struct {
-		Name   string `json:"name" validate:"required"`
-		UserID string `json:"user_id" validate:"required,uuid"`
+		Name        string `json:"name" validate:"required"`
+		UserID      string `json:"user_id" validate:"required,uuid"`
+		Description string `json:"description" validate:"max=255"`
 	}
 
 	var body requestBody
@@ -103,7 +104,7 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	room, err := h.RoomService.CreateRoom(r.Context(), body.Name, userID)
+	room, err := h.RoomService.CreateRoom(r.Context(), body.Name, userID, body.Description)
 	if err != nil {
 		slog.Error("error creating room", "error", err)
 		http.Error(w, "error creating room", http.StatusInternalServerError)
@@ -111,24 +112,26 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type response struct {
-		ID        string `json:"id"`
-		UserID    string `json:"user_id"`
-		CreatedAt string `json:"created_at"`
+		ID          string `json:"id"`
+		UserID      string `json:"user_id"`
+		CreatedAt   string `json:"created_at"`
+		Description string `json:"description"`
 	}
 
 	createdAt := room.CreatedAt.Time.Format(time.RFC3339)
 
 	w.WriteHeader(http.StatusCreated)
-	sendJSON(w, response{ID: room.ID.String(), UserID: userID.String(), CreatedAt: createdAt})
+	sendJSON(w, response{ID: room.ID.String(), UserID: userID.String(), CreatedAt: createdAt, Description: body.Description})
 
 	go h.WebsocketService.NotifyRoomsListClients(types.Message{
 		Kind:   types.MessageKindRoomCreated,
 		RoomID: room.ID.String(),
 		Value: types.RoomCreated{
-			ID:        room.ID.String(),
-			CreatedAt: createdAt,
-			Name:      body.Name,
-			UserID:    userID.String(),
+			ID:          room.ID.String(),
+			CreatedAt:   createdAt,
+			Name:        body.Name,
+			UserID:      userID.String(),
+			Description: body.Description,
 		},
 	})
 }

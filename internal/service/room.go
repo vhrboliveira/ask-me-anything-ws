@@ -19,10 +19,11 @@ func NewRoomService(queries *pgstore.Queries) *RoomService {
 	return &RoomService{Queries: queries}
 }
 
-func (s *RoomService) CreateRoom(ctx context.Context, name string, userID uuid.UUID) (pgstore.InsertRoomRow, error) {
+func (s *RoomService) CreateRoom(ctx context.Context, name string, userID uuid.UUID, description string) (pgstore.InsertRoomRow, error) {
 	room, err := s.Queries.InsertRoom(ctx, pgstore.InsertRoomParams{
-		Name:   name,
-		UserID: userID,
+		Name:        name,
+		UserID:      userID,
+		Description: description,
 	})
 
 	return room, err
