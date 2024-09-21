@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -23,33 +24,39 @@ func TestCreateRoom(t *testing.T) {
 		method = http.MethodPost
 	)
 
-	t.Run("creates a room", func(t *testing.T) {
-		truncateData(t)
+	createsRoomTestCases := []struct {
+		name        string
+		description string
+	}{
+		{name: "creates a room with all the data", description: "A new space to learn Go"},
+		{name: "creates a room without description", description: ""},
+	}
 
-		roomName := "Learning Go"
-		userID := generateUser(t)
-		parsedUserID, _ := uuid.Parse(userID)
-		user := pgstore.User{ID: parsedUserID}
-		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `"}`)
-		rr := execRequestGeneratingSession(t, method, url, payload, &user)
+	for _, tc := range createsRoomTestCases {
+		t.Run(tc.name, func(t *testing.T) {
+			truncateData(t)
 
-		response := rr.Result()
-		defer response.Body.Close()
+			roomName := "Learning Go"
+			userID := generateUser(t)
+			parsedUserID, _ := uuid.Parse(userID)
+			user := pgstore.User{ID: parsedUserID}
+			payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `", "description": "` + tc.description + `"}`)
+			rr := execRequestGeneratingSession(t, method, url, payload, &user)
 
-		var result struct {
-			ID        string `json:"id"`
-			UserID    string `json:"user_id"`
-			CreatedAt string `json:"created_at"`
-			UpdatedAt string `json:"updated_at"`
-		}
+			response := rr.Result()
+			defer response.Body.Close()
 
-		require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+			var result pgstore.Room
+			require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 
-		assert.Equal(t, response.StatusCode, http.StatusCreated)
-		assertValidUUID(t, result.ID)
-		assertValidDate(t, result.CreatedAt)
-		assert.Equal(t, result.UserID, userID)
-	})
+			assert.Equal(t, response.StatusCode, http.StatusCreated)
+			assertValidUUID(t, result.ID.String())
+			assertValidDate(t, result.CreatedAt.Time.Format(time.RFC3339))
+			assert.True(t, result.CreatedAt.Valid)
+			assert.Equal(t, result.UserID.String(), userID)
+			assert.Equal(t, result.Description, tc.description)
+		})
+	}
 
 	t.Run("sends a message to the websocket subscribers when a room is created", func(t *testing.T) {
 		truncateData(t)
@@ -67,16 +74,18 @@ func TestCreateRoom(t *testing.T) {
 		defer ws.Close()
 
 		roomName := "Learning Go"
-		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `"}`)
+		description := "A new space to learn Go"
+		payload := strings.NewReader(`{"name": "` + roomName + `", "user_id": "` + userID + `", "description": "` + description + `"}`)
 		rr := execRequestGeneratingSession(t, method, url, payload, &user)
 
 		response := rr.Result()
 		defer response.Body.Close()
 
 		var result struct {
-			ID        string `json:"id"`
-			CreatedAt string `json:"created_at"`
-			UserID    string `json:"user_id"`
+			ID          string `json:"id"`
+			CreatedAt   string `json:"created_at"`
+			UserID      string `json:"user_id"`
+			Description string `json:"description"`
 		}
 
 		require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
@@ -101,6 +110,7 @@ func TestCreateRoom(t *testing.T) {
 		assertValidDate(t, result.CreatedAt)
 		assert.Equal(t, result.UserID, userID)
 		assert.Equal(t, roomCreated.UserID, userID)
+		assert.Equal(t, roomCreated.Description, description)
 	})
 
 	truncateData(t)
@@ -185,6 +195,14 @@ func TestCreateRoom(t *testing.T) {
 			expectedMessage:    "invalid body\n",
 			expectedStatusCode: http.StatusBadRequest,
 			payload:            `[{"name": "` + roomName + `", "user_id": "` + userID + `"}, {"name": "` + roomName2 + `", "user_id": "` + userID + `"}]`,
+			setConstraint:      false,
+		},
+		{
+			name:               "returns error if payload provides invalid description",
+			fn:                 execRequestGeneratingSession,
+			expectedMessage:    "invalid body\n",
+			expectedStatusCode: http.StatusBadRequest,
+			payload:            `{"name": "` + roomName + `", "user_id": "` + userID + `", "description": ` + userID + ` }`,
 			setConstraint:      false,
 		},
 		{
