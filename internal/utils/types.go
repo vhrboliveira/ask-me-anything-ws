@@ -39,5 +39,6 @@ type RoomCreated struct {
 	CreatedAt   string `json:"created_at"`
 	Name        string `json:"name"`
 	UserID      string `json:"user_id"`
+	CreatorName string `json:"creator_name"`
 	Description string `json:"description"`
 }

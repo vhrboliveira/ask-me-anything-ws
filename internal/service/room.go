@@ -29,11 +29,11 @@ func (s *RoomService) CreateRoom(ctx context.Context, name string, userID uuid.U
 	return room, err
 }
 
-func (s *RoomService) GetRooms(ctx context.Context) ([]pgstore.Room, error) {
+func (s *RoomService) GetRooms(ctx context.Context) ([]pgstore.GetRoomsRow, error) {
 	rooms, err := s.Queries.GetRooms(ctx)
 
 	if rooms == nil {
-		rooms = []pgstore.Room{}
+		rooms = []pgstore.GetRoomsRow{}
 	}
 
 	return rooms, err

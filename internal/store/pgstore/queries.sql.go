@@ -153,18 +153,30 @@ func (q *Queries) GetRoomWithUser(ctx context.Context, id uuid.UUID) (GetRoomWit
 }
 
 const getRooms = `-- name: GetRooms :many
-SELECT id, name, created_at, updated_at, user_id, description FROM rooms ORDER BY created_at ASC
+SELECT r.id, r.name, r.created_at, r.updated_at, r.user_id, r.description, u."name" as "creator_name" FROM rooms r
+LEFT JOIN users u on r.user_id = u.id
+ORDER BY r.created_at ASC
 `
 
-func (q *Queries) GetRooms(ctx context.Context) ([]Room, error) {
+type GetRoomsRow struct {
+	ID          uuid.UUID        `db:"id" json:"id"`
+	Name        string           `db:"name" json:"name"`
+	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	UserID      uuid.UUID        `db:"user_id" json:"user_id"`
+	Description string           `db:"description" json:"description"`
+	CreatorName pgtype.Text      `db:"creator_name" json:"creator_name"`
+}
+
+func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
 	rows, err := q.db.Query(ctx, getRooms)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Room
+	var items []GetRoomsRow
 	for rows.Next() {
-		var i Room
+		var i GetRoomsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -172,6 +184,7 @@ func (q *Queries) GetRooms(ctx context.Context) ([]Room, error) {
 			&i.UpdatedAt,
 			&i.UserID,
 			&i.Description,
+			&i.CreatorName,
 		); err != nil {
 			return nil, err
 		}

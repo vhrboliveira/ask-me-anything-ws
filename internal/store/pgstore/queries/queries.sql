@@ -9,7 +9,9 @@ LEFT JOIN users u ON r.user_id = u.id
 WHERE r.id = $1;
 
 -- name: GetRooms :many
-SELECT * FROM rooms ORDER BY created_at ASC;
+SELECT r.*, u."name" as "creator_name" FROM rooms r
+LEFT JOIN users u on r.user_id = u.id
+ORDER BY r.created_at ASC;
 
 -- name: InsertRoom :one
 INSERT INTO rooms
@@ -64,3 +66,14 @@ SELECT * FROM users WHERE email = $1 LIMIT 1;
 
 -- name: GetUserById :one
 SELECT * FROM users WHERE id = $1 LIMIT 1;
+
+-- name: UpdateUser :one
+UPDATE users
+SET
+  name = $2,
+  enable_picture = $3,
+  new_user = false,
+  updated_at = now()
+WHERE
+  id = $1
+RETURNING new_user, updated_at;
