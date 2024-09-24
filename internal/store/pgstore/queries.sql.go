@@ -321,3 +321,33 @@ func (q *Queries) RemoveReactionFromMessage(ctx context.Context, id uuid.UUID) (
 	err := row.Scan(&reaction_count)
 	return reaction_count, err
 }
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE users
+SET
+  name = $2,
+  enable_picture = $3,
+  new_user = false,
+  updated_at = now()
+WHERE
+  id = $1
+RETURNING new_user, updated_at
+`
+
+type UpdateUserParams struct {
+	ID            uuid.UUID `db:"id" json:"id"`
+	Name          string    `db:"name" json:"name"`
+	EnablePicture bool      `db:"enable_picture" json:"enable_picture"`
+}
+
+type UpdateUserRow struct {
+	NewUser   bool             `db:"new_user" json:"new_user"`
+	UpdatedAt pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error) {
+	row := q.db.QueryRow(ctx, updateUser, arg.ID, arg.Name, arg.EnablePicture)
+	var i UpdateUserRow
+	err := row.Scan(&i.NewUser, &i.UpdatedAt)
+	return i, err
+}

@@ -1,7 +1,9 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"errors"
 	"io"
 	"net/http"
@@ -413,4 +415,29 @@ func createUser(t testing.TB, email, name, provider, providerUserId, avatarURL s
 	require.NoError(t, row.Scan(&id))
 
 	return id.String()
+}
+
+func setNewUserToFalse(t testing.TB, userID string) {
+	t.Helper()
+
+	DBPool.Exec(context.Background(), "UPDATE users set new_user=false where id = $1", userID)
+}
+
+func getValkeyData(t testing.TB, sessionID string) pgstore.User {
+	gob.Register(pgstore.User{})
+	ctx := context.Background()
+	result := ValkeyClient.Do(ctx, ValkeyClient.B().Get().Key(sessionID).Build())
+	require.NoError(t, result.Error())
+
+	encryptedSession, err := result.ToString()
+	require.NoError(t, err)
+
+	decryptedSession, err := auth.Decrypt([]byte(encryptedSession))
+	require.NoError(t, err)
+
+	var userSessionValues pgstore.User
+	err = gob.NewDecoder(bytes.NewBuffer(decryptedSession)).Decode(&userSessionValues)
+	require.NoError(t, err)
+
+	return userSessionValues
 }

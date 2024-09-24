@@ -21,6 +21,7 @@ type Handlers struct {
 	Router           *chi.Mux
 	RoomService      *service.RoomService
 	MessageService   *service.MessageService
+	UserService      *service.UserService
 	WebsocketService *service.WebSocketService
 }
 
@@ -34,12 +35,14 @@ func sendJSON(w http.ResponseWriter, rawData any) {
 func NewHandler(
 	roomService *service.RoomService,
 	messageService *service.MessageService,
+	userService *service.UserService,
 	websocketService *service.WebSocketService,
 ) *Handlers {
 	return &Handlers{
 		Router:           chi.NewRouter(),
 		RoomService:      roomService,
 		MessageService:   messageService,
+		UserService:      userService,
 		WebsocketService: websocketService,
 	}
 }
@@ -131,6 +134,7 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:   createdAt,
 			Name:        body.Name,
 			UserID:      userID.String(),
+			CreatorName: user.Name,
 			Description: body.Description,
 		},
 	})
@@ -449,6 +453,99 @@ func (h *Handlers) GetUserInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendJSON(w, user)
+}
+
+func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	type requestBody struct {
+		UserID        string `json:"user_id" validate:"required,uuid"`
+		Name          string `json:"name" validate:"required"`
+		EnablePicture bool   `json:"enable_picture" validate:"required"`
+	}
+
+	var body requestBody
+	validate := validator.New()
+
+	err := json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		slog.Error("failed to decode body", "error", err)
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	if err := validate.Struct(&body); err != nil {
+		slog.Error("validation failed", "error", err)
+
+		missingFields := []string{}
+		for _, err := range err.(validator.ValidationErrors) {
+			if err.Tag() == "required" {
+				missingFields = append(missingFields, err.Field())
+			}
+
+			if err.Tag() == "uuid" && err.Field() == "UserID" {
+				http.Error(w, "validation failed: UserID must be a valid UUID", http.StatusBadRequest)
+				return
+			}
+		}
+
+		http.Error(w, "validation failed, missing required field(s): "+strings.Join(missingFields, ", "), http.StatusBadRequest)
+		return
+	}
+
+	userID, err := uuid.Parse(body.UserID)
+	if err != nil {
+		slog.Error("invalid user id", "error", err)
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	user, ok := ctx.Value(auth.UserKey).(pgstore.User)
+	if !ok {
+		slog.Error("user not found on the session cookie")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if user.ID != userID {
+		slog.Error("the provided user ID is different from the session")
+		http.Error(w, "invalid user id", http.StatusForbidden)
+		return
+	}
+
+	newUser, updatedAt, err := h.UserService.UpdateUser(ctx, user.ID, body.Name, body.EnablePicture)
+	if err != nil {
+		slog.Error("error updating user", "error", err)
+		http.Error(w, "error updating user", http.StatusInternalServerError)
+		return
+	}
+
+	user.UpdatedAt = updatedAt
+	user.NewUser = newUser
+	user.Name = body.Name
+	user.EnablePicture = body.EnablePicture
+	err = auth.SetSessionData(ctx, user)
+	if err != nil {
+		http.Error(w, "error updating user", http.StatusInternalServerError)
+		return
+	}
+
+	type responseBody struct {
+		ID            uuid.UUID `json:"id"`
+		Name          string    `json:"name"`
+		EnablePicture bool      `json:"enable_picture"`
+		NewUser       bool      `json:"new_user"`
+		UpdatedAt     string    `json:"updated_at"`
+	}
+
+	sendJSON(w, responseBody{
+		ID:            user.ID,
+		Name:          body.Name,
+		EnablePicture: body.EnablePicture,
+		NewUser:       newUser,
+		UpdatedAt:     updatedAt.Time.Format(time.RFC3339),
+	})
+
+	return
 }
 
 func (h *Handlers) SubscribeToRoom(w http.ResponseWriter, r *http.Request) {

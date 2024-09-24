@@ -81,3 +81,15 @@ func (u *UserService) CreateUser(ctx context.Context, user pgstore.User) (userID
 
 	return userID, createdAt, updatedAt, err
 }
+
+func (u *UserService) UpdateUser(ctx context.Context, userID uuid.UUID, name string, enablePicture bool) (bool, pgtype.Timestamp, error) {
+	params := pgstore.UpdateUserParams{
+		ID:            userID,
+		Name:          name,
+		EnablePicture: enablePicture,
+	}
+
+	updatedUser, err := u.q.UpdateUser(ctx, params)
+
+	return updatedUser.NewUser, updatedUser.UpdatedAt, err
+}

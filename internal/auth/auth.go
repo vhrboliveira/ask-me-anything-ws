@@ -95,7 +95,7 @@ func encrypt(data []byte) ([]byte, error) {
 	return ciphertext, nil
 }
 
-func decrypt(ciphertext []byte) ([]byte, error) {
+func Decrypt(ciphertext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(encryptKey)
 	if err != nil {
 		return nil, err
@@ -121,6 +121,29 @@ func decrypt(ciphertext []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
+func SetSessionData(ctx context.Context, dbUser pgstore.User) error {
+	var buf bytes.Buffer
+	err := gob.NewEncoder(&buf).Encode(&dbUser)
+	if err != nil {
+		slog.Error("failed to serialize user data", "error", err)
+		return err
+	}
+
+	encryptedSession, err := encrypt(buf.Bytes())
+	if err != nil {
+		slog.Error("failed to encrypt session", "error", err)
+		return err
+	}
+
+	result := cache.Do(ctx, cache.B().Set().Key(dbUser.ID.String()).Value(string(encryptedSession)).Ex(oneDayInDuration).Build())
+	if result.Error() != nil {
+		slog.Error("failed to store session", "error", result.Error())
+		return result.Error()
+	}
+
+	return nil
+}
+
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session, err := store.Get(r, SessionName)
@@ -137,7 +160,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.Background()
+		ctx := r.Context()
 		result := cache.Do(ctx, cache.B().Get().Key(sessionID).Build())
 		if result.Error() != nil {
 			slog.Error("unauthorized", "error", result.Error())
@@ -152,7 +175,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		decryptedSession, err := decrypt([]byte(encryptedSession))
+		decryptedSession, err := Decrypt([]byte(encryptedSession))
 		if err != nil {
 			slog.Error("Failed to decrypt session", "error", err)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -181,6 +204,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 }
 
 func CallbackHandler(w http.ResponseWriter, r *http.Request) {
+	SITE_URL := os.Getenv("SITE_URL")
 	provider := chi.URLParam(r, "provider")
 	r = r.WithContext(context.WithValue(r.Context(), gothic.ProviderParamKey, provider))
 
@@ -203,7 +227,8 @@ func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbUser, err := UserService.GetUserByEmail(r.Context(), oauthUser.Email)
+	ctx := r.Context()
+	dbUser, err := UserService.GetUserByEmail(ctx, oauthUser.Email)
 	if err != nil {
 		slog.Error("Failed to get user", "error", err)
 		http.Error(w, "Error authenticating", http.StatusInternalServerError)
@@ -228,7 +253,7 @@ func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 			NewUser:        true,
 		}
 
-		userID, createdAt, updatedAt, err := UserService.CreateUser(r.Context(), dbUser)
+		userID, createdAt, updatedAt, err := UserService.CreateUser(ctx, dbUser)
 		if err != nil {
 			http.Error(w, "Error authenticating", http.StatusInternalServerError)
 			return
@@ -239,6 +264,12 @@ func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		dbUser.UpdatedAt = updatedAt
 	}
 
+	if dbUser.Provider != provider {
+		slog.Error("user email already exists with a different provider", "expected", dbUser.Provider, "provided", provider)
+		http.Redirect(w, r, SITE_URL+"/profile/error", http.StatusTemporaryRedirect)
+		return
+	}
+
 	session.Values["sessionID"] = dbUser.ID.String()
 	err = session.Save(r, w)
 	if err != nil {
@@ -247,31 +278,16 @@ func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var buf bytes.Buffer
-	err = gob.NewEncoder(&buf).Encode(&dbUser)
+	err = SetSessionData(ctx, dbUser)
 	if err != nil {
-		slog.Error("failed to serialize user data", "error", err)
 		http.Error(w, "error authenticating", http.StatusInternalServerError)
 		return
 	}
 
-	encryptedSession, err := encrypt(buf.Bytes())
-	if err != nil {
-		slog.Error("failed to encrypt session", "error", err)
-		http.Error(w, "error authenticating", http.StatusInternalServerError)
-		return
+	if dbUser.NewUser {
+		SITE_URL += "/profile"
 	}
 
-	ctx := context.Background()
-	sessionID := session.Values["sessionID"].(string)
-	result := cache.Do(ctx, cache.B().Set().Key(sessionID).Value(string(encryptedSession)).Ex(oneDayInDuration).Build())
-	if result.Error() != nil {
-		slog.Error("failed to store session", "error", result.Error())
-		http.Error(w, "error authenticating", http.StatusInternalServerError)
-		return
-	}
-
-	SITE_URL := os.Getenv("SITE_URL")
 	http.Redirect(w, r, SITE_URL, http.StatusTemporaryRedirect)
 }
 

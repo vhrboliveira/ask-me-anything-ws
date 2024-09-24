@@ -55,7 +55,7 @@ func main() {
 	messageService := service.NewMessageService(q)
 	userService := service.NewUserService(q)
 	wsService := service.NewWebSocketService()
-	h := web.NewHandler(roomService, messageService, wsService)
+	h := web.NewHandler(roomService, messageService, userService, wsService)
 
 	router := router.SetupRouter(h, userService, &valkeyClient)
 

@@ -88,7 +88,7 @@ func setup() {
 	messageService := service.NewMessageService(q)
 	userService := service.NewUserService(q)
 	wsService := service.NewWebSocketService()
-	Handler = web.NewHandler(roomService, messageService, wsService)
+	Handler = web.NewHandler(roomService, messageService, userService, wsService)
 	Router = router.SetupRouter(Handler, userService, &ValkeyClient)
 }
 

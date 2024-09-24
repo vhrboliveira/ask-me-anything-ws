@@ -52,19 +52,58 @@ func mockGothUser(u *pgstore.User) goth.User {
 
 func TestCallbackHandler(t *testing.T) {
 	testCases := []struct {
-		name         string
-		gothProvider goth.Provider
-		provider     string
+		name             string
+		gothProvider     goth.Provider
+		mockProvider     string
+		expectedProvider string
+		newUser          bool
+		expectedURL      string
+		isError          bool
 	}{
 		{
-			name:         "test callback handler from Google",
-			provider:     "google",
-			gothProvider: google.New("mock-client-id", "mock-client-secret", "/auth/google/callback"),
+			name:             "test callback handler for a new user from Google",
+			mockProvider:     "google",
+			expectedProvider: "google",
+			gothProvider:     google.New("mock-client-id", "mock-client-secret", "/auth/google/callback"),
+			newUser:          true,
+			expectedURL:      os.Getenv("SITE_URL") + "/profile",
+			isError:          false,
 		},
 		{
-			name:         "test callback handler from Facebook",
-			gothProvider: facebook.New("mock-client-id", "mock-client-secret", "/auth/facebook/callback"),
-			provider:     "facebook",
+			name:             "test callback handler for a new user from Facebook",
+			gothProvider:     facebook.New("mock-client-id", "mock-client-secret", "/auth/facebook/callback"),
+			mockProvider:     "facebook",
+			expectedProvider: "facebook",
+			newUser:          true,
+			expectedURL:      os.Getenv("SITE_URL") + "/profile",
+			isError:          false,
+		},
+		{
+			name:             "test callback handler for an existent user from Google",
+			mockProvider:     "google",
+			expectedProvider: "google",
+			gothProvider:     google.New("mock-client-id", "mock-client-secret", "/auth/google/callback"),
+			newUser:          false,
+			expectedURL:      os.Getenv("SITE_URL"),
+			isError:          false,
+		},
+		{
+			name:             "test callback handler for an existent user from Facebook",
+			mockProvider:     "facebook",
+			expectedProvider: "facebook",
+			gothProvider:     facebook.New("mock-client-id", "mock-client-secret", "/auth/facebook/callback"),
+			newUser:          false,
+			expectedURL:      os.Getenv("SITE_URL"),
+			isError:          false,
+		},
+		{
+			name:             "returns an error if account exists for a different provider",
+			mockProvider:     "google",
+			expectedProvider: "facebook",
+			gothProvider:     facebook.New("mock-client-id", "mock-client-secret", "/auth/facebook/callback"),
+			newUser:          false,
+			expectedURL:      os.Getenv("SITE_URL") + "/profile/error",
+			isError:          true,
 		},
 	}
 
@@ -73,27 +112,34 @@ func TestCallbackHandler(t *testing.T) {
 			truncateData(t)
 
 			userMock := mockGothUser(nil)
-			userMock.Provider = "google"
+			userMock.Provider = tc.mockProvider
 			providerUserID := "1234567890"
 			userMock.AvatarURL = "http://avatar.com/test.jpg"
-			createUser(t,
+			userID := createUser(t,
 				userMock.Email, userMock.Name, userMock.Provider, providerUserID, userMock.AvatarURL,
 			)
+
+			if !tc.newUser {
+				setNewUserToFalse(t, userID)
+			}
 
 			goth.UseProviders(tc.gothProvider)
 
 			gothic.GetProviderName = func(req *http.Request) (string, error) {
-				return tc.provider, nil
+				return tc.expectedProvider, nil
 			}
 			gothic.CompleteUserAuth = func(w http.ResponseWriter, r *http.Request) (goth.User, error) {
 				return userMock, nil
 			}
 
-			rr := execRequestWithoutCookie("GET", "/auth/"+tc.provider+"/callback", nil)
+			rr := execRequestWithoutCookie("GET", "/auth/"+tc.expectedProvider+"/callback", nil)
 
 			assert.Equal(t, http.StatusTemporaryRedirect, rr.Code)
-			assert.Contains(t, rr.Header().Get("Location"), os.Getenv("SITE_URL"))
-			assert.Contains(t, rr.Result().Header.Get("Set-Cookie"), auth.SessionName)
+			assert.Equal(t, rr.Header().Get("Location"), tc.expectedURL)
+
+			if !tc.isError {
+				assert.Contains(t, rr.Result().Header.Get("Set-Cookie"), auth.SessionName)
+			}
 		})
 	}
 }
