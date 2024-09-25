@@ -6,6 +6,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/gob"
 	"encoding/hex"
 	"errors"
@@ -45,6 +46,28 @@ var (
 	encryptKey  []byte
 	UserService *service.UserService
 )
+
+func downloadImage(url string) ([]byte, error) {
+	response, err := http.Get(url)
+	if err != nil {
+		slog.Error("unable to download avatar url from social account", "error", err)
+		return []byte{}, err
+	}
+	defer response.Body.Close()
+
+	imageBytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		slog.Error("unable to parse downloaded image to bytes", "error", err)
+		return []byte{}, err
+	}
+
+	return imageBytes, nil
+}
+
+func encodeToBase64(imageBytes []byte) string {
+	base64Img := base64.StdEncoding.EncodeToString(imageBytes)
+	return base64Img
+}
 
 func AuthInit(valkeyClient *valkey.Client, userService *service.UserService) {
 	gob.Register(pgstore.User{})
@@ -243,10 +266,18 @@ func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 			name = oauthUser.FirstName + " " + oauthUser.LastName
 		}
 
+		photo := ""
+		if oauthUser.AvatarURL != "" {
+			imageBytes, err := downloadImage(oauthUser.AvatarURL)
+			if err == nil {
+				photo = encodeToBase64(imageBytes)
+			}
+		}
+
 		dbUser = pgstore.User{
 			Email:          oauthUser.Email,
 			Name:           strings.TrimSpace(name),
-			Photo:          oauthUser.AvatarURL,
+			Photo:          photo,
 			Provider:       provider,
 			ProviderUserID: oauthUser.UserID,
 			EnablePicture:  true,
