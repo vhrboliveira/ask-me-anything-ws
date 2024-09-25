@@ -14,7 +14,7 @@ import (
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users
-  ("email", "name", "provider", "provider_user_id", "avatar_url") VALUES
+  ("email", "name", "provider", "provider_user_id", "photo") VALUES
   ($1, $2, $3, $4, $5)
 RETURNING "id", "created_at", "updated_at"
 `
@@ -24,7 +24,7 @@ type CreateUserParams struct {
 	Name           string `db:"name" json:"name"`
 	Provider       string `db:"provider" json:"provider"`
 	ProviderUserID string `db:"provider_user_id" json:"provider_user_id"`
-	AvatarUrl      string `db:"avatar_url" json:"avatar_url"`
+	Photo          string `db:"photo" json:"photo"`
 }
 
 type CreateUserRow struct {
@@ -39,7 +39,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		arg.Name,
 		arg.Provider,
 		arg.ProviderUserID,
-		arg.AvatarUrl,
+		arg.Photo,
 	)
 	var i CreateUserRow
 	err := row.Scan(&i.ID, &i.CreatedAt, &i.UpdatedAt)
@@ -117,7 +117,7 @@ func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]Mess
 
 const getRoomWithUser = `-- name: GetRoomWithUser :one
 SELECT
-  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."avatar_url", u."enable_picture"
+  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."photo", u."enable_picture"
 FROM rooms r
 LEFT JOIN users u ON r.user_id = u.id
 WHERE r.id = $1
@@ -131,7 +131,7 @@ type GetRoomWithUserRow struct {
 	UpdatedAt     pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 	Email         pgtype.Text      `db:"email" json:"email"`
 	CreatorName   pgtype.Text      `db:"creator_name" json:"creator_name"`
-	AvatarUrl     pgtype.Text      `db:"avatar_url" json:"avatar_url"`
+	Photo         pgtype.Text      `db:"photo" json:"photo"`
 	EnablePicture pgtype.Bool      `db:"enable_picture" json:"enable_picture"`
 }
 
@@ -146,7 +146,7 @@ func (q *Queries) GetRoomWithUser(ctx context.Context, id uuid.UUID) (GetRoomWit
 		&i.UpdatedAt,
 		&i.Email,
 		&i.CreatorName,
-		&i.AvatarUrl,
+		&i.Photo,
 		&i.EnablePicture,
 	)
 	return i, err
@@ -197,7 +197,7 @@ func (q *Queries) GetRooms(ctx context.Context) ([]GetRoomsRow, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, name, created_at, updated_at, avatar_url, enable_picture, provider, provider_user_id, new_user FROM users WHERE email = $1 LIMIT 1
+SELECT id, email, name, created_at, updated_at, photo, enable_picture, provider, provider_user_id, new_user FROM users WHERE email = $1 LIMIT 1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -209,7 +209,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Name,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.AvatarUrl,
+		&i.Photo,
 		&i.EnablePicture,
 		&i.Provider,
 		&i.ProviderUserID,
@@ -219,7 +219,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserById = `-- name: GetUserById :one
-SELECT id, email, name, created_at, updated_at, avatar_url, enable_picture, provider, provider_user_id, new_user FROM users WHERE id = $1 LIMIT 1
+SELECT id, email, name, created_at, updated_at, photo, enable_picture, provider, provider_user_id, new_user FROM users WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetUserById(ctx context.Context, id uuid.UUID) (User, error) {
@@ -231,7 +231,7 @@ func (q *Queries) GetUserById(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.Name,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.AvatarUrl,
+		&i.Photo,
 		&i.EnablePicture,
 		&i.Provider,
 		&i.ProviderUserID,

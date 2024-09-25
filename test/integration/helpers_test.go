@@ -391,7 +391,7 @@ func generateUser(t testing.TB) string {
 	return id
 }
 
-func createUser(t testing.TB, email, name, provider, providerUserId, avatarURL string) string {
+func createUser(t testing.TB, email, name, provider, providerUserId, Photo string) string {
 	t.Helper()
 
 	ctx := context.Background()
@@ -401,14 +401,14 @@ func createUser(t testing.TB, email, name, provider, providerUserId, avatarURL s
 		Name:           name,
 		Provider:       provider,
 		ProviderUserID: providerUserId,
-		AvatarUrl:      avatarURL,
+		Photo:          Photo,
 	}
 
-	insertQuery := "INSERT INTO users (email, name, provider, provider_user_id, avatar_url) VALUES ($1, $2, $3, $4, $5) returning id"
+	insertQuery := "INSERT INTO users (email, name, provider, provider_user_id, photo) VALUES ($1, $2, $3, $4, $5) returning id"
 	row := DBPool.QueryRow(
 		ctx,
 		insertQuery,
-		user.Email, user.Name, user.Provider, user.ProviderUserID, user.AvatarUrl,
+		user.Email, user.Name, user.Provider, user.ProviderUserID, user.Photo,
 	)
 
 	var id uuid.UUID

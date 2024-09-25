@@ -31,11 +31,11 @@ func TestUpdateProfile(t *testing.T) {
 		user := pgstore.User{
 			Provider:       "google",
 			ProviderUserID: "1234567890",
-			AvatarUrl:      "http://avatar.com/test.jpg",
+			Photo:          "http://avatar.com/test.jpg",
 			Email:          "vitor@vhrbo.tech",
 			Name:           "",
 		}
-		userID := createUser(t, user.Email, user.Name, user.Provider, user.ProviderUserID, user.AvatarUrl)
+		userID := createUser(t, user.Email, user.Name, user.Provider, user.ProviderUserID, user.Photo)
 		user.ID, err = uuid.Parse(userID)
 		require.NoError(t, err)
 
@@ -83,12 +83,12 @@ func TestUpdateProfile(t *testing.T) {
 	user := pgstore.User{
 		Provider:       "google",
 		ProviderUserID: "1234567890",
-		AvatarUrl:      "http://avatar.com/test.jpg",
+		Photo:          "http://avatar.com/test.jpg",
 		Email:          "vitor@vhrbo.tech",
 		Name:           "vitor",
 	}
 	enablePicture := "true"
-	userID := createUser(t, user.Email, user.Name, user.Provider, user.ProviderUserID, user.AvatarUrl)
+	userID := createUser(t, user.Email, user.Name, user.Provider, user.ProviderUserID, user.Photo)
 	user.ID, err = uuid.Parse(userID)
 	require.NoError(t, err)
 

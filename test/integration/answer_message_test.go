@@ -26,7 +26,9 @@ func TestAnswerMessage(t *testing.T) {
 
 		room := createAndGetRoom(t)
 		msgID, _ := createAndGetMessages(t, room.ID)
-
+		// userID := "any" // get the user ID from the room
+		// answer := "This is the answer to this message"
+		// payload := strings.NewReader(`{"user_id": "` + userID + `", "answer": "` + answer + `"}`)
 		rr := execAuthenticatedRequest(t, method, baseURL+room.ID.String()+"/messages/"+msgID+"/answer", nil)
 		response := rr.Result()
 		defer response.Body.Close()

@@ -3,7 +3,7 @@ SELECT * FROM rooms WHERE id = $1;
 
 -- name: GetRoomWithUser :one
 SELECT
-  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."avatar_url", u."enable_picture"
+  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."photo", u."enable_picture"
 FROM rooms r
 LEFT JOIN users u ON r.user_id = u.id
 WHERE r.id = $1;
@@ -57,7 +57,7 @@ WHERE
 
 -- name: CreateUser :one
 INSERT INTO users
-  ("email", "name", "provider", "provider_user_id", "avatar_url") VALUES
+  ("email", "name", "provider", "provider_user_id", "photo") VALUES
   ($1, $2, $3, $4, $5)
 RETURNING "id", "created_at", "updated_at";
 

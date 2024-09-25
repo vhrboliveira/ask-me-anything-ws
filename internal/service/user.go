@@ -64,7 +64,7 @@ func (u *UserService) CreateUser(ctx context.Context, user pgstore.User) (userID
 	dbUser := pgstore.CreateUserParams{
 		Email:          user.Email,
 		Name:           user.Name,
-		AvatarUrl:      user.AvatarUrl,
+		Photo:          user.Photo,
 		Provider:       user.Provider,
 		ProviderUserID: user.ProviderUserID,
 	}

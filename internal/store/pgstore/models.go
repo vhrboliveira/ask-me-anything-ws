@@ -34,7 +34,7 @@ type User struct {
 	Name           string           `db:"name" json:"name"`
 	CreatedAt      pgtype.Timestamp `db:"created_at" json:"created_at"`
 	UpdatedAt      pgtype.Timestamp `db:"updated_at" json:"updated_at"`
-	AvatarUrl      string           `db:"avatar_url" json:"avatar_url"`
+	Photo          string           `db:"photo" json:"photo"`
 	EnablePicture  bool             `db:"enable_picture" json:"enable_picture"`
 	Provider       string           `db:"provider" json:"provider"`
 	ProviderUserID string           `db:"provider_user_id" json:"provider_user_id"`

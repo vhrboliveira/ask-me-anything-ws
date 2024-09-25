@@ -195,7 +195,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Set userID in request context
+		// Set user in request context
 		ctx = context.WithValue(r.Context(), UserKey, userSessionValues)
 		r = r.WithContext(ctx)
 
@@ -246,10 +246,10 @@ func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		dbUser = pgstore.User{
 			Email:          oauthUser.Email,
 			Name:           strings.TrimSpace(name),
-			AvatarUrl:      oauthUser.AvatarURL,
+			Photo:          oauthUser.AvatarURL,
 			Provider:       provider,
 			ProviderUserID: oauthUser.UserID,
-			EnablePicture:  false,
+			EnablePicture:  true,
 			NewUser:        true,
 		}
 

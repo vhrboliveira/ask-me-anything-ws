@@ -25,14 +25,15 @@ func TestGetUser(t *testing.T) {
 	t.Run("returns the user information", func(t *testing.T) {
 		truncateData(t)
 
+		defaultBool := true
 		expectedUser := pgstore.User{
 			Name:           "vitor o",
 			Email:          "vitor@vhrbo.tech",
 			Provider:       "google",
 			ProviderUserID: "1234567890",
-			NewUser:        true,
-			EnablePicture:  false,
-			AvatarUrl:      "http://avatar.com/test.jpg",
+			NewUser:        defaultBool,
+			EnablePicture:  defaultBool,
+			Photo:          "http://avatar.com/test.jpg",
 		}
 
 		userID := createUser(t,
@@ -40,7 +41,7 @@ func TestGetUser(t *testing.T) {
 			expectedUser.Name,
 			expectedUser.Provider,
 			expectedUser.ProviderUserID,
-			expectedUser.AvatarUrl,
+			expectedUser.Photo,
 		)
 
 		expectedUser.ID, _ = uuid.Parse(userID)
@@ -58,7 +59,7 @@ func TestGetUser(t *testing.T) {
 		assert.Equal(t, user.Name, expectedUser.Name)
 		assert.Equal(t, user.Provider, expectedUser.Provider)
 		assert.Equal(t, user.ProviderUserID, expectedUser.ProviderUserID)
-		assert.Equal(t, user.AvatarUrl, expectedUser.AvatarUrl)
+		assert.Equal(t, user.Photo, expectedUser.Photo)
 		assert.Equal(t, user.NewUser, expectedUser.NewUser)
 		assert.Equal(t, user.EnablePicture, expectedUser.EnablePicture)
 		assert.True(t, user.CreatedAt.Valid)

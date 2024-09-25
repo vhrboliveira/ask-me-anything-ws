@@ -20,7 +20,7 @@ func mockGothUser(u *pgstore.User) goth.User {
 	userID := uuid.New().String()
 	name := "Test User"
 	email := "test@example.com"
-	avatarURL := "http://avatar.com/test.jpg"
+	photo := "http://avatar.com/test.jpg"
 	provider := "google"
 
 	if u != nil {
@@ -33,8 +33,8 @@ func mockGothUser(u *pgstore.User) goth.User {
 		if u.Email != "" {
 			email = u.Email
 		}
-		if u.AvatarUrl != "" {
-			avatarURL = u.AvatarUrl
+		if u.Photo != "" {
+			photo = u.Photo
 		}
 		if u.Provider != "" {
 			provider = u.Provider
@@ -45,7 +45,7 @@ func mockGothUser(u *pgstore.User) goth.User {
 		UserID:    userID,
 		Name:      name,
 		Email:     email,
-		AvatarURL: avatarURL,
+		AvatarURL: photo,
 		Provider:  provider,
 	}
 }
