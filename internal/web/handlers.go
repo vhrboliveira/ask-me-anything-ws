@@ -459,7 +459,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	type requestBody struct {
 		UserID        string `json:"user_id" validate:"required,uuid"`
 		Name          string `json:"name" validate:"required"`
-		EnablePicture bool   `json:"enable_picture" validate:"required"`
+		EnablePicture *bool  `json:"enable_picture"`
 	}
 
 	var body requestBody
@@ -472,18 +472,23 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validate.Struct(&body); err != nil {
+	missingFields := []string{}
+	if body.EnablePicture == nil {
+		missingFields = append(missingFields, "EnablePicture")
+	}
+	if err := validate.Struct(&body); err != nil || len(missingFields) > 0 {
 		slog.Error("validation failed", "error", err)
 
-		missingFields := []string{}
-		for _, err := range err.(validator.ValidationErrors) {
-			if err.Tag() == "required" {
-				missingFields = append(missingFields, err.Field())
-			}
+		if err != nil {
+			for _, err := range err.(validator.ValidationErrors) {
+				if err.Tag() == "required" {
+					missingFields = append(missingFields, err.Field())
+				}
 
-			if err.Tag() == "uuid" && err.Field() == "UserID" {
-				http.Error(w, "validation failed: UserID must be a valid UUID", http.StatusBadRequest)
-				return
+				if err.Tag() == "uuid" && err.Field() == "UserID" {
+					http.Error(w, "validation failed: UserID must be a valid UUID", http.StatusBadRequest)
+					return
+				}
 			}
 		}
 
@@ -512,7 +517,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newUser, updatedAt, err := h.UserService.UpdateUser(ctx, user.ID, body.Name, body.EnablePicture)
+	newUser, updatedAt, err := h.UserService.UpdateUser(ctx, user.ID, body.Name, *body.EnablePicture)
 	if err != nil {
 		slog.Error("error updating user", "error", err)
 		http.Error(w, "error updating user", http.StatusInternalServerError)
@@ -522,7 +527,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	user.UpdatedAt = updatedAt
 	user.NewUser = newUser
 	user.Name = body.Name
-	user.EnablePicture = body.EnablePicture
+	user.EnablePicture = *body.EnablePicture
 	err = auth.SetSessionData(ctx, user)
 	if err != nil {
 		http.Error(w, "error updating user", http.StatusInternalServerError)
@@ -540,7 +545,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, responseBody{
 		ID:            user.ID,
 		Name:          body.Name,
-		EnablePicture: body.EnablePicture,
+		EnablePicture: *body.EnablePicture,
 		NewUser:       newUser,
 		UpdatedAt:     updatedAt.Time.Format(time.RFC3339),
 	})

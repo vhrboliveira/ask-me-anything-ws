@@ -229,7 +229,7 @@ func TestCreateRoom(t *testing.T) {
 
 			body := parseResponseBody(t, response)
 
-			assert.Equal(t, response.StatusCode, tc.expectedStatusCode)
+			assert.Equal(t, tc.expectedStatusCode, response.StatusCode)
 			assert.Equal(t, tc.expectedMessage, body)
 		})
 	}

@@ -131,7 +131,7 @@ func TestUpdateProfile(t *testing.T) {
 		{
 			name:               "returns an error if request body is invalid",
 			fn:                 execRequestGeneratingSession,
-			expectedMessage:    "validation failed, missing required field(s): UserID, Name, EnablePicture\n",
+			expectedMessage:    "validation failed, missing required field(s): EnablePicture, UserID, Name\n",
 			expectedStatusCode: http.StatusBadRequest,
 			payload:            `{ "invalid": "field" }`,
 			setConstraint:      false,
@@ -169,6 +169,14 @@ func TestUpdateProfile(t *testing.T) {
 			setConstraint:      false,
 		},
 		{
+			name:               "returns an error if enable picture is not a boolean",
+			fn:                 execRequestGeneratingSession,
+			expectedMessage:    "invalid body\n",
+			expectedStatusCode: http.StatusBadRequest,
+			payload:            `{"user_id": "` + invalidUserID + `", "name": "` + user.Name + `", "enable_picture": "any value here"}`,
+			setConstraint:      false,
+		},
+		{
 			name:               "returns an error if userID is not a valid UUID",
 			fn:                 execRequestGeneratingSession,
 			expectedMessage:    "validation failed: UserID must be a valid UUID\n",
@@ -200,7 +208,7 @@ func TestUpdateProfile(t *testing.T) {
 
 			body := parseResponseBody(t, response)
 
-			assert.Equal(t, response.StatusCode, tc.expectedStatusCode)
+			assert.Equal(t, tc.expectedStatusCode, response.StatusCode)
 			assert.Equal(t, tc.expectedMessage, body)
 		})
 	}
