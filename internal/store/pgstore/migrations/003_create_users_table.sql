@@ -9,4 +9,5 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 ---- create above / drop below ----
+
 DROP TABLE IF EXISTS users;
