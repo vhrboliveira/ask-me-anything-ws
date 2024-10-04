@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/vhrboliveira/ama-go/internal/auth"
 	"github.com/vhrboliveira/ama-go/internal/service"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
@@ -398,6 +400,11 @@ func (h *Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) {
+	type requestBody struct {
+		UserID string `json:"user_id" validate:"required,uuid"`
+		Answer string `json:"answer"  validate:"required"`
+	}
+
 	rawRoomID := chi.URLParam(r, "room_id")
 	roomID, err := uuid.Parse(rawRoomID)
 	if err != nil {
@@ -410,6 +417,56 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		slog.Error("unable to parse message id", "error", err)
 		http.Error(w, "invalid message id", http.StatusBadRequest)
+		return
+	}
+
+	var body requestBody
+	validate := validator.New()
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		slog.Error("failed to decode body", "error", err)
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	body.Answer = strings.TrimSpace(body.Answer)
+
+	if err := validate.Struct(&body); err != nil {
+		slog.Error("validation failed", "error", err)
+
+		missingFields := []string{}
+		for _, err := range err.(validator.ValidationErrors) {
+			if err.Tag() == "required" {
+				missingFields = append(missingFields, err.Field())
+			}
+
+			if err.Tag() == "uuid" && err.Field() == "UserID" {
+				http.Error(w, "validation failed: UserID must be a valid UUID", http.StatusBadRequest)
+				return
+			}
+		}
+
+		http.Error(w, "validation failed, missing required field(s): "+strings.Join(missingFields, ", "), http.StatusBadRequest)
+		return
+	}
+
+	userID, err := uuid.Parse(body.UserID)
+	if err != nil {
+		slog.Error("invalid user id", "error", err)
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	user, ok := r.Context().Value(auth.UserKey).(pgstore.User)
+	if !ok {
+		slog.Error("user not found on the session cookie")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if user.ID != userID {
+		slog.Error("the provided user ID is different from the session", "session", user.ID, "givenUserID", userID)
+		http.Error(w, "invalid user id", http.StatusForbidden)
 		return
 	}
 
@@ -426,20 +483,29 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = h.MessageService.MarkMessageAsAnswered(ctx, messageID)
+	err = h.MessageService.AnswerMessage(ctx, messageID, body.Answer)
 	if err != nil {
 		slog.Error("error setting message to answered", "error", err)
+		if errors.Is(pgx.ErrNoRows, err) {
+			http.Error(w, "the message has already been answered", http.StatusInternalServerError)
+			return
+		}
+
 		http.Error(w, "error setting message to answered", http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	sendJSON(w, types.MessageAnswered{
+		ID:     rawMessageID,
+		Answer: body.Answer,
+	})
 
 	go h.WebsocketService.NotifyRoomClient(types.Message{
 		Kind:   types.MessageKindMessageAnswered,
 		RoomID: rawRoomID,
 		Value: types.MessageAnswered{
-			ID: rawMessageID,
+			ID:     rawMessageID,
+			Answer: body.Answer,
 		},
 	})
 }

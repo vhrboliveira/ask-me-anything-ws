@@ -25,7 +25,8 @@ type MessageReactionRemoved struct {
 }
 
 type MessageAnswered struct {
-	ID string `json:"id"`
+	ID     string `json:"id"`
+	Answer string `json:"answer"`
 }
 
 type Message struct {

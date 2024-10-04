@@ -86,7 +86,13 @@ func (s *MessageService) RemoveReactionFromMessage(ctx context.Context, messageI
 	return count, nil
 }
 
-func (s *MessageService) MarkMessageAsAnswered(ctx context.Context, messageID uuid.UUID) error {
-	err := s.Queries.MarkMessageAsAnswered(ctx, messageID)
+func (s *MessageService) AnswerMessage(ctx context.Context, messageID uuid.UUID, answer string) error {
+	params := pgstore.AnswerMessageParams{
+		ID:     messageID,
+		Answer: answer,
+	}
+
+	_, err := s.Queries.AnswerMessage(ctx, params)
+
 	return err
 }
