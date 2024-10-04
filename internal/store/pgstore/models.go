@@ -17,6 +17,7 @@ type Message struct {
 	Answered      bool             `db:"answered" json:"answered"`
 	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
 	UpdatedAt     pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	Answer        string           `db:"answer" json:"answer"`
 }
 
 type Room struct {

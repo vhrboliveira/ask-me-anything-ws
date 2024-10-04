@@ -12,6 +12,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const answerMessage = `-- name: AnswerMessage :one
+UPDATE messages
+SET
+  answered = true,
+  answer = $1,
+  updated_at = now()
+WHERE
+  id = $2 and answered = false
+RETURNING answered
+`
+
+type AnswerMessageParams struct {
+	Answer string    `db:"answer" json:"answer"`
+	ID     uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *Queries) AnswerMessage(ctx context.Context, arg AnswerMessageParams) (bool, error) {
+	row := q.db.QueryRow(ctx, answerMessage, arg.Answer, arg.ID)
+	var answered bool
+	err := row.Scan(&answered)
+	return answered, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users
   ("email", "name", "provider", "provider_user_id", "photo") VALUES
@@ -47,7 +70,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 }
 
 const getMessage = `-- name: GetMessage :one
-SELECT id, room_id, message, reaction_count, answered, created_at, updated_at FROM messages WHERE id = $1
+SELECT id, room_id, message, reaction_count, answered, created_at, updated_at, answer FROM messages WHERE id = $1
 `
 
 func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (Message, error) {
@@ -61,6 +84,7 @@ func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (Message, error)
 		&i.Answered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Answer,
 	)
 	return i, err
 }
@@ -84,7 +108,7 @@ func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (Room, error) {
 }
 
 const getRoomMessages = `-- name: GetRoomMessages :many
-SELECT id, room_id, message, reaction_count, answered, created_at, updated_at FROM messages WHERE room_id = $1 ORDER BY created_at DESC
+SELECT id, room_id, message, reaction_count, answered, created_at, updated_at, answer FROM messages WHERE room_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]Message, error) {
@@ -104,6 +128,7 @@ func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]Mess
 			&i.Answered,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Answer,
 		); err != nil {
 			return nil, err
 		}
@@ -117,7 +142,7 @@ func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]Mess
 
 const getRoomWithUser = `-- name: GetRoomWithUser :one
 SELECT
-  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."photo", u."enable_picture"
+  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."id" as "user_id", u."photo", u."enable_picture"
 FROM rooms r
 LEFT JOIN users u ON r.user_id = u.id
 WHERE r.id = $1
@@ -131,6 +156,7 @@ type GetRoomWithUserRow struct {
 	UpdatedAt     pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 	Email         pgtype.Text      `db:"email" json:"email"`
 	CreatorName   pgtype.Text      `db:"creator_name" json:"creator_name"`
+	UserID        pgtype.UUID      `db:"user_id" json:"user_id"`
 	Photo         pgtype.Text      `db:"photo" json:"photo"`
 	EnablePicture pgtype.Bool      `db:"enable_picture" json:"enable_picture"`
 }
@@ -146,6 +172,7 @@ func (q *Queries) GetRoomWithUser(ctx context.Context, id uuid.UUID) (GetRoomWit
 		&i.UpdatedAt,
 		&i.Email,
 		&i.CreatorName,
+		&i.UserID,
 		&i.Photo,
 		&i.EnablePicture,
 	)
@@ -287,20 +314,6 @@ func (q *Queries) InsertRoom(ctx context.Context, arg InsertRoomParams) (InsertR
 	var i InsertRoomRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
-}
-
-const markMessageAsAnswered = `-- name: MarkMessageAsAnswered :exec
-UPDATE messages
-SET
-  answered = true,
-  updated_at = now()
-WHERE
-  id = $1
-`
-
-func (q *Queries) MarkMessageAsAnswered(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, markMessageAsAnswered, id)
-	return err
 }
 
 const reactToMessage = `-- name: ReactToMessage :one

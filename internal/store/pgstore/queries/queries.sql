@@ -3,7 +3,7 @@ SELECT * FROM rooms WHERE id = $1;
 
 -- name: GetRoomWithUser :one
 SELECT
-  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."photo", u."enable_picture"
+  r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."id" as "user_id", u."photo", u."enable_picture"
 FROM rooms r
 LEFT JOIN users u ON r.user_id = u.id
 WHERE r.id = $1;
@@ -47,13 +47,15 @@ WHERE
   id = $1 AND reaction_count > 0
 RETURNING reaction_count;
 
--- name: MarkMessageAsAnswered :exec
+-- name: AnswerMessage :one
 UPDATE messages
 SET
   answered = true,
+  answer = $1,
   updated_at = now()
 WHERE
-  id = $1;
+  id = $2 and answered = false
+RETURNING answered;
 
 -- name: CreateUser :one
 INSERT INTO users
