@@ -30,7 +30,9 @@ func TestGetRoomMessages(t *testing.T) {
 			{RoomID: room.ID, Message: "message 1"},
 			{RoomID: room.ID, Message: "message 2"},
 		}
+		answer := "It's done!"
 		insertMessages(t, msgs)
+		answerMessages(t, answer)
 
 		newURL := baseURL + room.ID.String() + "/messages"
 		rr := execAuthenticatedRequest(t, method, newURL, nil)
@@ -50,6 +52,8 @@ func TestGetRoomMessages(t *testing.T) {
 		for _, result := range results {
 			assertValidUUID(t, result.ID.String())
 			assertValidDate(t, result.CreatedAt.Time.Format(time.RFC3339))
+			assert.True(t, result.Answered, "expected the answer to be true")
+			assert.Equal(t, answer, result.Answer)
 
 			_, ok := expectedMsgs[result.Message]
 			assert.True(t, ok, "message not found")
@@ -65,6 +69,8 @@ func TestGetRoomMessages(t *testing.T) {
 
 		room := createAndGetRoom(t)
 		messageID, messageTxt := createAndGetMessages(t, room.ID)
+		answer := "This is answered!"
+		answerMessageByID(t, messageID, answer)
 
 		newURL := baseURL + room.ID.String() + "/messages/" + messageID
 		rr := execAuthenticatedRequest(t, method, newURL, nil)
@@ -79,8 +85,9 @@ func TestGetRoomMessages(t *testing.T) {
 		assert.Equal(t, room.ID.String(), result.RoomID.String())
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 		assert.True(t, result.CreatedAt.Valid, "expected created at to be not empty")
-		assert.False(t, result.Answered, "expected answered to be false")
+		assert.True(t, result.Answered, "expected answered to be true")
 		assert.Equal(t, int(result.ReactionCount), 0, "expected reaction count to be 0")
+		assert.Equal(t, answer, result.Answer)
 	})
 
 	truncateData(t)

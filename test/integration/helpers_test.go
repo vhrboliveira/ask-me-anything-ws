@@ -199,10 +199,7 @@ func truncateData(t testing.TB) {
 		TRUNCATE TABLE users RESTART IDENTITY CASCADE;
 		`
 	_, err := DBPool.Exec(context.Background(), query)
-
-	if err != nil {
-		t.Fatalf("Failed to truncate tables: %v", err)
-	}
+	require.NoError(t, err, "failed to truncate tables")
 
 	ValkeyClient.Do(context.Background(), ValkeyClient.B().Flushall().Build())
 }
@@ -214,9 +211,8 @@ func createRooms(t testing.TB, names []string) {
 	userID := generateUser(t)
 
 	tx, err := DBPool.Begin(ctx)
-	if err != nil {
-		t.Fatalf("Failed to begin transaction to create rooms: %v", err)
-	}
+	require.NoError(t, err, "failed to begin transaction to create rooms")
+
 	defer tx.Rollback(ctx)
 
 	stmt := `INSERT INTO rooms (name, user_id) VALUES ($1, $2)`
@@ -228,14 +224,10 @@ func createRooms(t testing.TB, names []string) {
 
 	bx := tx.SendBatch(ctx, batch)
 	err = bx.Close()
-	if err != nil {
-		t.Fatalf("Failed to create rooms: %v", err)
-	}
+	require.NoError(t, err, "failed to create rooms")
 
 	err = tx.Commit(ctx)
-	if err != nil {
-		t.Fatalf("Failed to commit the transactions to create rooms: %v", err)
-	}
+	require.NoError(t, err, "failed to commit the transactions to create rooms")
 }
 
 func getRoomByName(t testing.TB, name string) pgstore.Room {
@@ -243,9 +235,7 @@ func getRoomByName(t testing.TB, name string) pgstore.Room {
 	ctx := context.Background()
 
 	rows, err := DBPool.Query(ctx, "SELECT id, name, user_id FROM rooms WHERE name = $1", name)
-	if err != nil {
-		t.Fatalf("Failed to get room: %v", err)
-	}
+	require.NoError(t, err, "failed to get room")
 	defer rows.Close()
 
 	if !rows.Next() {
@@ -254,10 +244,7 @@ func getRoomByName(t testing.TB, name string) pgstore.Room {
 
 	var room pgstore.Room
 	err = rows.Scan(&room.ID, &room.Name, &room.UserID)
-	if err != nil {
-		t.Fatalf("Failed to scan room: %v", err)
-	}
-
+	require.NoError(t, err, "failed to scan room")
 	return room
 }
 
@@ -275,9 +262,7 @@ func insertMessages(t testing.TB, msgs []pgstore.InsertMessageParams) {
 	ctx := context.Background()
 
 	tx, err := DBPool.Begin(ctx)
-	if err != nil {
-		t.Fatalf("Failed to begin messages transaction: %v", err)
-	}
+	require.NoError(t, err, "error beginning the transaction to insert message")
 	defer tx.Rollback(ctx)
 
 	stmt := `INSERT INTO messages (room_id, message) VALUES ($1, $2)`
@@ -289,14 +274,28 @@ func insertMessages(t testing.TB, msgs []pgstore.InsertMessageParams) {
 
 	bx := tx.SendBatch(ctx, batch)
 	err = bx.Close()
-	if err != nil {
-		t.Fatalf("Failed to send batch when inserting messages: %v", err)
-	}
+	require.NoError(t, err, "failed to send batch when inserting messages")
 
 	err = tx.Commit(ctx)
-	if err != nil {
-		t.Fatalf("Failed to insert messages: %v", err)
-	}
+	require.NoError(t, err, "failed to commit transaction when inserting message")
+}
+
+func answerMessageByID(t testing.TB, messageID, answer string) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	_, err := DBPool.Exec(ctx, "UPDATE messages SET answered = true, answer = $1 WHERE id = $2", answer, messageID)
+	require.NoError(t, err, "error answering message by id")
+}
+
+func answerMessages(t testing.TB, answer string) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	_, err := DBPool.Exec(ctx, "UPDATE messages SET answered = true, answer = $1", answer)
+	require.NoError(t, err, "error answering all messages")
 }
 
 func getMessageIDByMessage(t testing.TB, message string) string {
@@ -309,9 +308,7 @@ func getMessageIDByMessage(t testing.TB, message string) string {
 	var id uuid.UUID
 	var ans bool
 	err := row.Scan(&id, &ans)
-	if err != nil {
-		t.Fatalf("Failed to scan message: %v", err)
-	}
+	require.NoError(t, err, "failed to get message ID by message")
 
 	return id.String()
 }
@@ -339,9 +336,7 @@ func getMessageReactions(t testing.TB, messageID string) int {
 
 	var count int
 	err := row.Scan(&count)
-	if err != nil {
-		t.Fatalf("Failed to scan message: %v", err)
-	}
+	require.NoError(t, err, "failed to scan message while getting message reactions")
 
 	return count
 }
@@ -352,9 +347,7 @@ func setMessageReaction(t testing.TB, messageID string, count int) {
 	ctx := context.Background()
 
 	_, err := DBPool.Exec(ctx, "UPDATE messages SET reaction_count = $1 WHERE id = $2", count, messageID)
-	if err != nil {
-		t.Fatalf("Failed to update message: %v", err)
-	}
+	require.NoError(t, err, "failed to update message while setting message reaction")
 }
 
 func getUserIDByEmail(t testing.TB, email string) string {
@@ -427,17 +420,17 @@ func getValkeyData(t testing.TB, sessionID string) pgstore.User {
 	gob.Register(pgstore.User{})
 	ctx := context.Background()
 	result := ValkeyClient.Do(ctx, ValkeyClient.B().Get().Key(sessionID).Build())
-	require.NoError(t, result.Error())
+	require.NoError(t, result.Error(), "failed to get session ID on valkey data session")
 
 	encryptedSession, err := result.ToString()
-	require.NoError(t, err)
+	require.NoError(t, err, "failed to get string data from valkey data session")
 
 	decryptedSession, err := auth.Decrypt([]byte(encryptedSession))
-	require.NoError(t, err)
+	require.NoError(t, err, "failed to decrypt valkey data session")
 
 	var userSessionValues pgstore.User
 	err = gob.NewDecoder(bytes.NewBuffer(decryptedSession)).Decode(&userSessionValues)
-	require.NoError(t, err)
+	require.NoError(t, err, "failed to decode gob from decrypted data")
 
 	return userSessionValues
 }
