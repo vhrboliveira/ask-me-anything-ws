@@ -40,7 +40,7 @@ func TestMessageReaction(t *testing.T) {
 				rr := execAuthenticatedRequest(t, http.MethodPatch, newURL, nil)
 				response := rr.Result()
 				defer response.Body.Close()
-				assert.Equal(t, response.StatusCode, http.StatusOK)
+				assert.Equal(t, http.StatusOK, response.StatusCode)
 			}()
 		}
 		wg.Wait()
@@ -66,7 +66,7 @@ func TestMessageReaction(t *testing.T) {
 		require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 
 		want := 0
-		assert.Equal(t, response.StatusCode, http.StatusOK)
+		assert.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, want, result.Count)
 	})
 
@@ -130,7 +130,7 @@ func TestMessageReaction(t *testing.T) {
 				Count int `json:"count"`
 			}
 			require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
-			assert.Equal(t, response.StatusCode, http.StatusOK)
+			assert.Equal(t, http.StatusOK, response.StatusCode)
 			assert.Equal(t, tc.expectedResult, strconv.Itoa(result.Count))
 		})
 
@@ -200,7 +200,7 @@ func TestMessageReaction(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, json.Unmarshal(jsonBytes, &messageReactionAdded))
 
-			assert.Equal(t, response.StatusCode, http.StatusOK)
+			assert.Equal(t, http.StatusOK, response.StatusCode)
 			assert.Equal(t, tc.expectedResult, strconv.Itoa(result.Count))
 			assert.Equal(t, msgID, messageReactionAdded.ID)
 			assert.Equal(t, tc.expectedResult, strconv.Itoa(int(messageReactionAdded.Count)))

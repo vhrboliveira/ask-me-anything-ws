@@ -39,7 +39,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 		var results []pgstore.Message
 		require.NoError(t, json.NewDecoder(response.Body).Decode(&results))
-		assert.Equal(t, response.StatusCode, http.StatusOK)
+		assert.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, len(msgs), len(results))
 
 		expectedMsgs := map[string]struct{}{
@@ -77,7 +77,7 @@ func TestGetRoomMessages(t *testing.T) {
 		assertValidUUID(t, result.ID.String())
 		assert.Equal(t, messageTxt, result.Message)
 		assert.Equal(t, room.ID.String(), result.RoomID.String())
-		assert.Equal(t, response.StatusCode, http.StatusOK)
+		assert.Equal(t, http.StatusOK, response.StatusCode)
 		assert.True(t, result.CreatedAt.Valid, "expected created at to be not empty")
 		assert.False(t, result.Answered, "expected answered to be false")
 		assert.Equal(t, int(result.ReactionCount), 0, "expected reaction count to be 0")

@@ -69,7 +69,7 @@ func TestUpdateProfile(t *testing.T) {
 		assert.Equal(t, result.Name, valkeyUser.Name)
 		assert.Equal(t, result.NewUser, expectedNewUser)
 		assert.Equal(t, result.NewUser, valkeyUser.NewUser)
-		assert.Equal(t, response.StatusCode, http.StatusOK)
+		assert.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, result.UpdatedAt, valkeyUser.UpdatedAt.Time.Format(time.RFC3339))
 		assertValidDate(t, result.UpdatedAt)
 

@@ -33,7 +33,7 @@ func TestGetRoom(t *testing.T) {
 
 		var results []pgstore.Room
 		require.NoError(t, json.NewDecoder(response.Body).Decode(&results))
-		assert.Equal(t, response.StatusCode, http.StatusOK)
+		assert.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, len(roomNames), len(results))
 
 		expectedNames := map[string]struct{}{

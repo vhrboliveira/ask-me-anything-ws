@@ -18,7 +18,7 @@ func TestHealthcheck(t *testing.T) {
 	response := rr.Result()
 	defer response.Body.Close()
 
-	assert.Equal(t, response.StatusCode, http.StatusOK)
+	assert.Equal(t, http.StatusOK, response.StatusCode)
 
 	body := parseResponseBody(t, response)
 

@@ -53,7 +53,7 @@ func TestGetUser(t *testing.T) {
 		var user pgstore.User
 		require.NoError(t, json.NewDecoder(response.Body).Decode(&user))
 
-		assert.Equal(t, response.StatusCode, http.StatusOK)
+		assert.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, user.ID, expectedUser.ID)
 		assert.Equal(t, user.Email, expectedUser.Email)
 		assert.Equal(t, user.Name, expectedUser.Name)
