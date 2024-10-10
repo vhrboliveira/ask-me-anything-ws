@@ -77,7 +77,7 @@ func TestGetRoomMessages(t *testing.T) {
 		response := rr.Result()
 		defer response.Body.Close()
 
-		var result pgstore.Message
+		var result pgstore.GetRoomMessagesRow
 		require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 
 		assertValidUUID(t, result.ID.String())

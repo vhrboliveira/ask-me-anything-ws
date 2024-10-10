@@ -77,6 +77,39 @@ func execRequestWithInvalidCookie(method, url string, body io.Reader) *httptest.
 	return rr
 }
 
+func generateSession(t testing.TB, user *pgstore.User) {
+	t.Helper()
+
+	gothUser := mockGothUser(user)
+
+	gothic.GetProviderName = func(req *http.Request) (string, error) {
+		return "google", nil
+	}
+	gothic.CompleteUserAuth = func(w http.ResponseWriter, r *http.Request) (goth.User, error) {
+		return gothUser, nil
+	}
+
+	callbackReq := httptest.NewRequest("GET", "/auth/google/callback", nil)
+	callbackRec := httptest.NewRecorder()
+
+	Router.ServeHTTP(callbackRec, callbackReq)
+}
+
+func execRequestGettingSession(t testing.TB, method, url string, body io.Reader, userID string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	r := httptest.NewRequest(method, url, body)
+	rr := httptest.NewRecorder()
+
+	session, _ := gothic.Store.Get(r, auth.SessionName)
+	session.Values["sessionID"] = userID
+	session.Save(r, rr)
+
+	Router.ServeHTTP(rr, r)
+
+	return rr
+}
+
 func execRequestGeneratingSession(t testing.TB, method, url string, body io.Reader, user *pgstore.User) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -197,6 +230,7 @@ func truncateData(t testing.TB) {
 		TRUNCATE TABLE rooms RESTART IDENTITY CASCADE;
 		TRUNCATE TABLE messages RESTART IDENTITY CASCADE;
 		TRUNCATE TABLE users RESTART IDENTITY CASCADE;
+		TRUNCATE TABLE messages_reactions RESTART IDENTITY CASCADE;
 		`
 	_, err := DBPool.Exec(context.Background(), query)
 	require.NoError(t, err, "failed to truncate tables")
@@ -332,13 +366,27 @@ func getMessageReactions(t testing.TB, messageID string) int {
 
 	ctx := context.Background()
 
-	row := DBPool.QueryRow(ctx, "SELECT reaction_count FROM messages WHERE id = $1", messageID)
+	row := DBPool.QueryRow(ctx, "SELECT count(*) FROM messages_reactions WHERE message_id = $1", messageID)
 
 	var count int
 	err := row.Scan(&count)
 	require.NoError(t, err, "failed to scan message while getting message reactions")
 
 	return count
+}
+
+func setMessageReactionWithUserID(t testing.TB, messageID, userID string) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	t.Cleanup(func() {
+		_, err := DBPool.Exec(ctx, "DELETE FROM messages_reactions WHERE message_id = $1 and user_id = $2", messageID, userID)
+		require.NoError(t, err, "failed to cleanup message while setting message reaction")
+	})
+
+	_, err := DBPool.Exec(ctx, "INSERT INTO messages_reactions (message_id, user_id) VALUES ($1, $2)", messageID, userID)
+	require.NoError(t, err, "failed to insert into message while setting message reaction")
 }
 
 func setMessageReaction(t testing.TB, messageID string, count int) {

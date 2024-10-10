@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
 
@@ -60,69 +61,18 @@ func setMessagesConstraintFailure(t testing.TB) {
 	})
 }
 
-func setUpdateMessageReactionConstraintFailure(t testing.TB, roomID uuid.UUID) {
+func setMessagesReactionsConstraint(t testing.TB) {
 	t.Helper()
 
 	ctx := context.Background()
 
 	t.Cleanup(func() {
-		_, err := DBPool.Exec(ctx, "ALTER TABLE messages DROP CONSTRAINT msg_chk_reaction_count;")
-		if err != nil {
-			t.Fatalf("Failed to remove constraint: %v", err)
-		}
+		_, err := DBPool.Exec(ctx, "ALTER TABLE mr RENAME TO messages_reactions")
+		require.NoError(t, err, "failed to remove constraint when setting message reaction constraint")
 	})
 
-	_, err := DBPool.Exec(ctx, "ALTER TABLE messages ADD CONSTRAINT msg_chk_reaction_count UNIQUE(reaction_count);")
-	if err != nil {
-		t.Fatalf("Failed to set constraint: %v", err)
-	}
-
-	messages := []pgstore.InsertMessageParams{
-		{
-			RoomID:  roomID,
-			Message: "message test",
-		},
-	}
-
-	insertMessages(t, messages)
-
-	_, err = DBPool.Exec(ctx, "UPDATE messages SET reaction_count = 1")
-	if err != nil {
-		t.Fatalf("Failed to update constraint message: %v", err)
-	}
-}
-
-func setDeleteMessageReactionConstraintFailure(t testing.TB, roomID uuid.UUID, msgID string) {
-	t.Helper()
-
-	ctx := context.Background()
-
-	t.Cleanup(func() {
-		_, err := DBPool.Exec(ctx, "ALTER TABLE messages DROP CONSTRAINT msg_chk_reaction_count;")
-		if err != nil {
-			t.Fatalf("Failed to remove constraint: %v", err)
-		}
-	})
-
-	messages := []pgstore.InsertMessageParams{
-		{
-			RoomID:  roomID,
-			Message: "message test",
-		},
-	}
-	insertMessages(t, messages)
-
-	_, err := DBPool.Exec(ctx, "UPDATE messages SET reaction_count = 1 WHERE id != $1", msgID)
-	if err != nil {
-		t.Fatalf("Failed to update constraint message: %v", err)
-	}
-
-	setMessageReaction(t, msgID, 2)
-
-	_, err = DBPool.Exec(ctx, "ALTER TABLE messages ADD CONSTRAINT msg_chk_reaction_count UNIQUE(reaction_count);")
-	if err != nil {
-		t.Fatalf("Failed to set constraint: %v", err)
-	}
+	_, err := DBPool.Exec(ctx, "ALTER TABLE messages_reactions RENAME TO mr;")
+	require.NoError(t, err, "failed to set constraint when setting message reaction constraint")
 }
 
 func setAnswerMessageConstraintFailure(t testing.TB, roomID uuid.UUID) {
@@ -130,10 +80,13 @@ func setAnswerMessageConstraintFailure(t testing.TB, roomID uuid.UUID) {
 
 	ctx := context.Background()
 
+	t.Cleanup(func() {
+		_, err := DBPool.Exec(ctx, "ALTER TABLE messages DROP CONSTRAINT msg_chk_answer;")
+		require.NoError(t, err, "failed to remove constraint when setting answer message constraint")
+	})
+
 	_, err := DBPool.Exec(ctx, "ALTER TABLE messages ADD CONSTRAINT msg_chk_answer UNIQUE(answered);")
-	if err != nil {
-		t.Fatalf("Failed to set constraint: %v", err)
-	}
+	require.NoError(t, err, "failed to set constraint when setting answer message constraint")
 
 	messages := []pgstore.InsertMessageParams{
 		{
@@ -145,14 +98,5 @@ func setAnswerMessageConstraintFailure(t testing.TB, roomID uuid.UUID) {
 	insertMessages(t, messages)
 
 	_, err = DBPool.Exec(ctx, "UPDATE messages SET answered = true")
-	if err != nil {
-		t.Fatalf("Failed to update constraint message: %v", err)
-	}
-
-	t.Cleanup(func() {
-		_, err := DBPool.Exec(ctx, "ALTER TABLE messages DROP CONSTRAINT msg_chk_answer;")
-		if err != nil {
-			t.Fatalf("Failed to remove constraint: %v", err)
-		}
-	})
+	require.NoError(t, err, "failed to update constraint message when setting answer message constraint")
 }
