@@ -297,6 +297,10 @@ func (h *Handlers) GetRoomMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
+	type requestBody struct {
+		UserID string `json:"user_id" validate:"required,uuid"`
+	}
+
 	type response struct {
 		Count int32 `json:"count"`
 	}
@@ -329,10 +333,55 @@ func (h *Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := h.MessageService.ReactToMessage(ctx, messageID)
+	var body requestBody
+	validate := validator.New()
+	err = json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
-		slog.Error("error reacting to message", "error", err)
-		http.Error(w, "error reacting to message", http.StatusInternalServerError)
+		slog.Error("failed to decode body", "error", err)
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	if err := validate.Struct(&body); err != nil {
+		slog.Error("validation failed", "error", err)
+
+		missingFields := []string{}
+		uuidFields := map[string]string{
+			"UserID": "UserID must be a valid UUID",
+		}
+
+		for _, err := range err.(validator.ValidationErrors) {
+			switch err.Tag() {
+			case "required":
+				missingFields = append(missingFields, err.Field())
+			case "uuid":
+				if errMsg, ok := uuidFields[err.Field()]; ok {
+					http.Error(w, "validation failed: "+errMsg, http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
+		http.Error(w, "validation failed, missing required field(s): "+strings.Join(missingFields, ", "), http.StatusBadRequest)
+		return
+	}
+
+	user, ok := r.Context().Value(auth.UserKey).(pgstore.User)
+	if !ok {
+		slog.Error("user not found on the session cookie")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if user.ID.String() != body.UserID {
+		slog.Error("the provided user ID is different from the session")
+		http.Error(w, "invalid user id", http.StatusForbidden)
+		return
+	}
+
+	count, err := h.MessageService.ReactToMessage(ctx, messageID, user.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

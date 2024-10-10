@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
 
@@ -28,11 +29,11 @@ func (s *MessageService) CreateMessage(ctx context.Context, roomID uuid.UUID, ms
 	return message, err
 }
 
-func (s *MessageService) GetMessages(ctx context.Context, roomID uuid.UUID) ([]pgstore.Message, error) {
+func (s *MessageService) GetMessages(ctx context.Context, roomID uuid.UUID) ([]pgstore.GetRoomMessagesRow, error) {
 	roomMessages, err := s.Queries.GetRoomMessages(ctx, roomID)
 
 	if roomMessages == nil {
-		roomMessages = []pgstore.Message{}
+		roomMessages = []pgstore.GetRoomMessagesRow{}
 	}
 
 	return roomMessages, err
@@ -66,16 +67,22 @@ func (s *MessageService) CheckMessageExists(ctx context.Context, messageID uuid.
 	return http.StatusOK, nil
 }
 
-func (s *MessageService) ReactToMessage(ctx context.Context, messageID uuid.UUID) (int32, error) {
-	count, err := s.Queries.ReactToMessage(ctx, messageID)
+func (s *MessageService) ReactToMessage(ctx context.Context, messageID, userID uuid.UUID) (int32, error) {
+	params := pgstore.InsertMessageReactionParams{
+		MessageID: messageID,
+		UserID:    userID,
+	}
 
-	return count, err
-}
-
-func (s *MessageService) RemoveReactionFromMessage(ctx context.Context, messageID uuid.UUID) (int32, error) {
-	count, err := s.Queries.RemoveReactionFromMessage(ctx, messageID)
+	count, err := s.Queries.InsertMessageReaction(ctx, params)
 	if err != nil {
 		count = 0
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == "23505" {
+				slog.Error("user has already reacted to the message", "error", err)
+				return 0, errors.New("user has already reacted to the message")
+			}
+		}
 
 		if !errors.Is(err, pgx.ErrNoRows) {
 			slog.Error("error reacting to message", "error", err)
@@ -83,7 +90,8 @@ func (s *MessageService) RemoveReactionFromMessage(ctx context.Context, messageI
 		}
 	}
 
-	return count, nil
+	return int32(count), nil
+}
 }
 
 func (s *MessageService) AnswerMessage(ctx context.Context, messageID uuid.UUID, answer string) error {
