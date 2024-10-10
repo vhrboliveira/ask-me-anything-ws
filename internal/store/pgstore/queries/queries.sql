@@ -9,8 +9,8 @@ LEFT JOIN users u ON r.user_id = u.id
 WHERE r.id = $1;
 
 -- name: GetRooms :many
-SELECT r.*, u."name" as "creator_name" FROM rooms r
-LEFT JOIN users u on r.user_id = u.id
+SELECT r.*, u."name" AS "creator_name" FROM rooms r
+LEFT JOIN users u ON r.user_id = u.id
 ORDER BY r.created_at ASC;
 
 -- name: InsertRoom :one
@@ -23,7 +23,9 @@ RETURNING "id", "created_at";
 SELECT * FROM messages WHERE id = $1;
 
 -- name: GetRoomMessages :many
-SELECT * FROM messages WHERE room_id = $1 ORDER BY created_at DESC;
+SELECT m.*, COUNT(mr.message_id) AS reaction_count FROM messages m
+LEFT JOIN messages_reactions mr ON mr.message_id = m.id
+WHERE room_id = $1 GROUP BY m.id ORDER BY created_at DESC;
 
 -- name: InsertMessage :one
 INSERT INTO messages
@@ -31,21 +33,35 @@ INSERT INTO messages
   ($1, $2)
 RETURNING "id", "created_at";
 
--- name: ReactToMessage :one
-UPDATE messages
-SET
-  reaction_count = reaction_count + 1
-WHERE
-  id = $1
-RETURNING reaction_count;
+-- name: InsertMessageReaction :one
+WITH mr_t AS (
+  SELECT COUNT(*) AS total_count
+  FROM messages_reactions mr
+  WHERE mr."message_id" = $1
+), inserted AS (
+  INSERT INTO messages_reactions ("message_id", "user_id")
+  VALUES ($1, $2)
+  RETURNING "message_id"  
+)
+SELECT (SELECT total_count FROM mr_t) + COUNT(inserted."message_id") AS total_reactions
+FROM inserted;
 
--- name: RemoveReactionFromMessage :one
-UPDATE messages
-SET
-  reaction_count = reaction_count - 1
-WHERE
-  id = $1 AND reaction_count > 0
-RETURNING reaction_count;
+-- name: RemoveMessageReaction :one
+WITH mr_t AS (
+  SELECT COUNT(*) AS total_count
+  FROM messages_reactions mr
+  WHERE mr."message_id" = $1
+), deleted AS (
+  DELETE FROM messages_reactions mr2
+  WHERE mr2.message_id = $1 AND mr2.user_id = $2
+  RETURNING *
+)
+SELECT (SELECT total_count FROM mr_t) - 1 AS total_reactions
+FROM deleted;
+
+-- name: UserHasReacted :one
+SELECT * FROM messages_reactions
+WHERE message_id = $1 AND user_id = $2;
 
 -- name: AnswerMessage :one
 UPDATE messages
@@ -54,7 +70,7 @@ SET
   answer = $1,
   updated_at = now()
 WHERE
-  id = $2 and answered = false
+  id = $2 AND answered = false
 RETURNING answered;
 
 -- name: CreateUser :one
