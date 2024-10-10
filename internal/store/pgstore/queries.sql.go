@@ -19,7 +19,7 @@ SET
   answer = $1,
   updated_at = now()
 WHERE
-  id = $2 and answered = false
+  id = $2 AND answered = false
 RETURNING answered
 `
 
@@ -70,7 +70,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 }
 
 const getMessage = `-- name: GetMessage :one
-SELECT id, room_id, message, reaction_count, answered, created_at, updated_at, answer FROM messages WHERE id = $1
+SELECT id, room_id, message, answered, created_at, updated_at, answer FROM messages WHERE id = $1
 `
 
 func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (Message, error) {
@@ -80,7 +80,6 @@ func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (Message, error)
 		&i.ID,
 		&i.RoomID,
 		&i.Message,
-		&i.ReactionCount,
 		&i.Answered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -108,27 +107,40 @@ func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (Room, error) {
 }
 
 const getRoomMessages = `-- name: GetRoomMessages :many
-SELECT id, room_id, message, reaction_count, answered, created_at, updated_at, answer FROM messages WHERE room_id = $1 ORDER BY created_at DESC
+SELECT m.id, m.room_id, m.message, m.answered, m.created_at, m.updated_at, m.answer, COUNT(mr.message_id) AS reaction_count FROM messages m
+LEFT JOIN messages_reactions mr ON mr.message_id = m.id
+WHERE room_id = $1 GROUP BY m.id ORDER BY created_at DESC
 `
 
-func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]Message, error) {
+type GetRoomMessagesRow struct {
+	ID            uuid.UUID        `db:"id" json:"id"`
+	RoomID        uuid.UUID        `db:"room_id" json:"room_id"`
+	Message       string           `db:"message" json:"message"`
+	Answered      bool             `db:"answered" json:"answered"`
+	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	Answer        string           `db:"answer" json:"answer"`
+	ReactionCount int64            `db:"reaction_count" json:"reaction_count"`
+}
+
+func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetRoomMessagesRow, error) {
 	rows, err := q.db.Query(ctx, getRoomMessages, roomID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Message
+	var items []GetRoomMessagesRow
 	for rows.Next() {
-		var i Message
+		var i GetRoomMessagesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.RoomID,
 			&i.Message,
-			&i.ReactionCount,
 			&i.Answered,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Answer,
+			&i.ReactionCount,
 		); err != nil {
 			return nil, err
 		}
@@ -180,8 +192,8 @@ func (q *Queries) GetRoomWithUser(ctx context.Context, id uuid.UUID) (GetRoomWit
 }
 
 const getRooms = `-- name: GetRooms :many
-SELECT r.id, r.name, r.created_at, r.updated_at, r.user_id, r.description, u."name" as "creator_name" FROM rooms r
-LEFT JOIN users u on r.user_id = u.id
+SELECT r.id, r.name, r.created_at, r.updated_at, r.user_id, r.description, u."name" AS "creator_name" FROM rooms r
+LEFT JOIN users u ON r.user_id = u.id
 ORDER BY r.created_at ASC
 `
 
@@ -291,6 +303,32 @@ func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) (I
 	return i, err
 }
 
+const insertMessageReaction = `-- name: InsertMessageReaction :one
+WITH mr_t AS (
+  SELECT COUNT(*) AS total_count
+  FROM messages_reactions mr
+  WHERE mr."message_id" = $1
+), inserted AS (
+  INSERT INTO messages_reactions ("message_id", "user_id")
+  VALUES ($1, $2)
+  RETURNING "message_id"  
+)
+SELECT (SELECT total_count FROM mr_t) + COUNT(inserted."message_id") AS total_reactions
+FROM inserted
+`
+
+type InsertMessageReactionParams struct {
+	MessageID uuid.UUID `db:"message_id" json:"message_id"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *Queries) InsertMessageReaction(ctx context.Context, arg InsertMessageReactionParams) (int32, error) {
+	row := q.db.QueryRow(ctx, insertMessageReaction, arg.MessageID, arg.UserID)
+	var total_reactions int32
+	err := row.Scan(&total_reactions)
+	return total_reactions, err
+}
+
 const insertRoom = `-- name: InsertRoom :one
 INSERT INTO rooms
   ("name", "user_id", "description") VALUES
@@ -316,36 +354,30 @@ func (q *Queries) InsertRoom(ctx context.Context, arg InsertRoomParams) (InsertR
 	return i, err
 }
 
-const reactToMessage = `-- name: ReactToMessage :one
-UPDATE messages
-SET
-  reaction_count = reaction_count + 1
-WHERE
-  id = $1
-RETURNING reaction_count
+const removeMessageReaction = `-- name: RemoveMessageReaction :one
+WITH mr_t AS (
+  SELECT COUNT(*) AS total_count
+  FROM messages_reactions mr
+  WHERE mr."message_id" = $1
+), deleted AS (
+  DELETE FROM messages_reactions mr2
+  WHERE mr2.message_id = $1 AND mr2.user_id = $2
+  RETURNING message_id, user_id
+)
+SELECT (SELECT total_count FROM mr_t) - 1 AS total_reactions
+FROM deleted
 `
 
-func (q *Queries) ReactToMessage(ctx context.Context, id uuid.UUID) (int32, error) {
-	row := q.db.QueryRow(ctx, reactToMessage, id)
-	var reaction_count int32
-	err := row.Scan(&reaction_count)
-	return reaction_count, err
+type RemoveMessageReactionParams struct {
+	MessageID uuid.UUID `db:"message_id" json:"message_id"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
 }
 
-const removeReactionFromMessage = `-- name: RemoveReactionFromMessage :one
-UPDATE messages
-SET
-  reaction_count = reaction_count - 1
-WHERE
-  id = $1 AND reaction_count > 0
-RETURNING reaction_count
-`
-
-func (q *Queries) RemoveReactionFromMessage(ctx context.Context, id uuid.UUID) (int32, error) {
-	row := q.db.QueryRow(ctx, removeReactionFromMessage, id)
-	var reaction_count int32
-	err := row.Scan(&reaction_count)
-	return reaction_count, err
+func (q *Queries) RemoveMessageReaction(ctx context.Context, arg RemoveMessageReactionParams) (int32, error) {
+	row := q.db.QueryRow(ctx, removeMessageReaction, arg.MessageID, arg.UserID)
+	var total_reactions int32
+	err := row.Scan(&total_reactions)
+	return total_reactions, err
 }
 
 const updateUser = `-- name: UpdateUser :one
@@ -375,5 +407,22 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateU
 	row := q.db.QueryRow(ctx, updateUser, arg.ID, arg.Name, arg.EnablePicture)
 	var i UpdateUserRow
 	err := row.Scan(&i.NewUser, &i.UpdatedAt)
+	return i, err
+}
+
+const userHasReacted = `-- name: UserHasReacted :one
+SELECT message_id, user_id FROM messages_reactions
+WHERE message_id = $1 AND user_id = $2
+`
+
+type UserHasReactedParams struct {
+	MessageID uuid.UUID `db:"message_id" json:"message_id"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *Queries) UserHasReacted(ctx context.Context, arg UserHasReactedParams) (MessagesReaction, error) {
+	row := q.db.QueryRow(ctx, userHasReacted, arg.MessageID, arg.UserID)
+	var i MessagesReaction
+	err := row.Scan(&i.MessageID, &i.UserID)
 	return i, err
 }
