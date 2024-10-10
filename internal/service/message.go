@@ -92,6 +92,26 @@ func (s *MessageService) ReactToMessage(ctx context.Context, messageID, userID u
 
 	return int32(count), nil
 }
+
+func (s *MessageService) RemoveReactionFromMessage(ctx context.Context, messageID, userID uuid.UUID) (int32, error) {
+	params := pgstore.RemoveMessageReactionParams{
+		MessageID: messageID,
+		UserID:    userID,
+	}
+	count, err := s.Queries.RemoveMessageReaction(ctx, params)
+	if err != nil {
+		count = 0
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Error("error removing reaction from message: message reaction not found")
+			return 0, errors.New("message reaction not found")
+		}
+
+		slog.Error("error removing reaction from message", "error", err)
+		return 0, errors.New("error removing reaction from message")
+	}
+
+	return int32(count), nil
 }
 
 func (s *MessageService) AnswerMessage(ctx context.Context, messageID uuid.UUID, answer string) error {
