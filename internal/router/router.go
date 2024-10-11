@@ -61,6 +61,7 @@ func SetupRouter(h *web.Handlers, userService *service.UserService, valkeyClient
 
 				router.Route("/{room_id}", func(router chi.Router) {
 					router.Get("/", h.GetRoom)
+					router.Get("/reactions", h.GetRoomMessagesReactions)
 					router.Route("/messages", func(router chi.Router) {
 						router.Post("/", h.CreateRoomMessage)
 						router.Get("/", h.GetRoomMessages)
