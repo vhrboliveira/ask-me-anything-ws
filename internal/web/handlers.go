@@ -91,8 +91,8 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := uuid.Parse(body.UserID)
 	if err != nil {
-		slog.Error("invalid user id", "error", err)
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		slog.Error("invalid user ID", "error", err)
+		http.Error(w, "invalid user ID", http.StatusBadRequest)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	if user.ID.String() != body.UserID {
 		slog.Error("the provided user ID is different from the session")
-		http.Error(w, "invalid user id", http.StatusForbidden)
+		http.Error(w, "invalid user ID", http.StatusForbidden)
 		return
 	}
 
@@ -375,7 +375,7 @@ func (h *Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
 
 	if user.ID.String() != body.UserID {
 		slog.Error("the provided user ID is different from the session")
-		http.Error(w, "invalid user id", http.StatusForbidden)
+		http.Error(w, "invalid user ID", http.StatusForbidden)
 		return
 	}
 
@@ -476,7 +476,7 @@ func (h *Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Requ
 
 	if user.ID.String() != body.UserID {
 		slog.Error("the provided user ID is different from the session")
-		http.Error(w, "invalid user id", http.StatusForbidden)
+		http.Error(w, "invalid user ID", http.StatusForbidden)
 		return
 	}
 
@@ -551,8 +551,8 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 
 	userID, err := uuid.Parse(body.UserID)
 	if err != nil {
-		slog.Error("invalid user id", "error", err)
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		slog.Error("invalid user ID", "error", err)
+		http.Error(w, "invalid user ID", http.StatusBadRequest)
 		return
 	}
 
@@ -565,7 +565,7 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 
 	if user.ID != userID {
 		slog.Error("the provided user ID is different from the session", "session", user.ID, "givenUserID", userID)
-		http.Error(w, "invalid user id", http.StatusForbidden)
+		http.Error(w, "invalid user ID", http.StatusForbidden)
 		return
 	}
 
@@ -607,6 +607,58 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 			Answer: body.Answer,
 		},
 	})
+}
+
+func (h *Handlers) GetRoomMessagesReactions(w http.ResponseWriter, r *http.Request) {
+	type response struct {
+		IDS []string `json:"ids"`
+	}
+
+	rawRoomID := chi.URLParam(r, "room_id")
+	roomID, err := uuid.Parse(rawRoomID)
+	if err != nil {
+		http.Error(w, "invalid room id", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	status, err := h.RoomService.CheckRoomExists(ctx, roomID)
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		slog.Error("user_id not provided")
+		http.Error(w, "validation failed, missing required field(s): UserID", http.StatusBadRequest)
+		return
+	}
+
+	user, ok := r.Context().Value(auth.UserKey).(pgstore.User)
+	if !ok {
+		slog.Error("user not found on the session cookie")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if user.ID.String() != userID {
+		slog.Error("the provided user ID is different from the session")
+		http.Error(w, "invalid user ID", http.StatusForbidden)
+		return
+	}
+
+	ids, err := h.MessageService.GetRoomMessagesReactions(ctx, roomID, user.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(ids) == 0 {
+		ids = []string{}
+	}
+
+	sendJSON(w, response{IDS: ids})
 }
 
 func (h *Handlers) GetUserInfo(w http.ResponseWriter, r *http.Request) {
@@ -663,8 +715,8 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := uuid.Parse(body.UserID)
 	if err != nil {
-		slog.Error("invalid user id", "error", err)
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		slog.Error("invalid user ID", "error", err)
+		http.Error(w, "invalid user ID", http.StatusBadRequest)
 		return
 	}
 
@@ -678,7 +730,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 	if user.ID != userID {
 		slog.Error("the provided user ID is different from the session")
-		http.Error(w, "invalid user id", http.StatusForbidden)
+		http.Error(w, "invalid user ID", http.StatusForbidden)
 		return
 	}
 
