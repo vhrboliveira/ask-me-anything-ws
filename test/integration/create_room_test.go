@@ -132,7 +132,7 @@ func TestCreateRoom(t *testing.T) {
 		{
 			name:               "returns forbidden error if user ID does not match user ID from the session",
 			fn:                 execRequestGeneratingSession,
-			expectedMessage:    "invalid user id\n",
+			expectedMessage:    "invalid user ID\n",
 			expectedStatusCode: http.StatusForbidden,
 			payload:            `{"name": "` + roomName + `", "user_id": "` + invalidUserID + `"}`,
 			setConstraint:      false,

@@ -103,7 +103,7 @@ func TestUpdateProfile(t *testing.T) {
 		{
 			name:               "returns forbidden error if user ID does not match user ID from the session",
 			fn:                 execRequestGeneratingSession,
-			expectedMessage:    "invalid user id\n",
+			expectedMessage:    "invalid user ID\n",
 			expectedStatusCode: http.StatusForbidden,
 			payload:            `{"user_id": "` + invalidUserID + `", "name": "` + user.Name + `", "enable_picture": ` + enablePicture + `}`,
 			setConstraint:      false,

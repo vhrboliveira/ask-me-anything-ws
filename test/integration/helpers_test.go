@@ -347,18 +347,20 @@ func getMessageIDByMessage(t testing.TB, message string) string {
 	return id.String()
 }
 
-func createAndGetMessages(t testing.TB, roomID uuid.UUID) (string, string) {
+func createAndGetMessages(t testing.TB, roomID uuid.UUID) (msgID, message string) {
 	t.Helper()
 
 	msgs := []pgstore.InsertMessageParams{
 		{
 			RoomID:  roomID,
-			Message: "message 1",
+			Message: "message " + uuid.New().String(),
 		},
 	}
 
 	insertMessages(t, msgs)
-	return getMessageIDByMessage(t, msgs[0].Message), msgs[0].Message
+	msgID = getMessageIDByMessage(t, msgs[0].Message)
+	message = msgs[0].Message
+	return msgID, message
 }
 
 func getMessageReactions(t testing.TB, messageID string) int {

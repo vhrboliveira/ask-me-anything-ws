@@ -424,7 +424,7 @@ func TestMessageReaction(t *testing.T) {
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "message not found\n",
-			expectedStatusCode: http.StatusBadRequest,
+			expectedStatusCode: http.StatusNotFound,
 		},
 		{
 			name:               "delete - returns an error if message does not exist",
@@ -433,7 +433,7 @@ func TestMessageReaction(t *testing.T) {
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "message not found\n",
-			expectedStatusCode: http.StatusBadRequest,
+			expectedStatusCode: http.StatusNotFound,
 		},
 		{
 			name:               "patch - returns an error if fails to get message",

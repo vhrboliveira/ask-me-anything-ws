@@ -176,7 +176,6 @@ func TestGetRoomMessages(t *testing.T) {
 			url:                baseURL + fakeID + "/messages/" + fakeID,
 			setConstraint:      nil,
 		},
-
 		{
 			name:               "returns an error if message id is not valid when getting a message",
 			fn:                 execAuthenticatedRequest,

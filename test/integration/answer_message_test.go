@@ -241,7 +241,7 @@ func TestAnswerMessage(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			payload:            `{"user_id": "` + userID + `", "answer": "` + answer + `"}`,
 			expectedMessage:    "message not found\n",
-			expectedStatusCode: http.StatusBadRequest,
+			expectedStatusCode: http.StatusNotFound,
 			url:                baseURL + room.ID.String() + "/messages/" + fakeID + "/answer",
 			setConstraint:      nil,
 		},
