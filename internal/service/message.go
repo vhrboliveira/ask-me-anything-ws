@@ -57,7 +57,7 @@ func (s *MessageService) CheckMessageExists(ctx context.Context, messageID uuid.
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			slog.Error("message not found", "error", err)
-			return http.StatusBadRequest, errors.New("message not found")
+			return http.StatusNotFound, errors.New("message not found")
 		}
 
 		slog.Error("error checking if message exists", "error", err)
@@ -112,6 +112,26 @@ func (s *MessageService) RemoveReactionFromMessage(ctx context.Context, messageI
 	}
 
 	return int32(count), nil
+}
+
+func (s *MessageService) GetRoomMessagesReactions(ctx context.Context, roomID, userID uuid.UUID) ([]string, error) {
+	params := pgstore.GetRoomMessagesReactionsParams{
+		RoomID: roomID,
+		UserID: userID,
+	}
+
+	msgIDS, err := s.Queries.GetRoomMessagesReactions(ctx, params)
+	if err != nil {
+		slog.Error("error getting messages reactions", "error", err)
+		return []string{}, errors.New("error getting messages reactions")
+	}
+
+	var ids []string
+	for _, id := range msgIDS {
+		ids = append(ids, id.String())
+	}
+
+	return ids, err
 }
 
 func (s *MessageService) AnswerMessage(ctx context.Context, messageID uuid.UUID, answer string) error {
