@@ -95,3 +95,8 @@ SET
 WHERE
   id = $1
 RETURNING new_user, updated_at;
+
+-- name: GetRoomMessagesReactions :many
+SELECT mr.message_id FROM messages_reactions mr 
+LEFT JOIN messages m ON m.id = mr.message_id 
+WHERE m.room_id = $1 AND mr.user_id = $2;

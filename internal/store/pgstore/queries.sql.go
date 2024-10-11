@@ -152,6 +152,37 @@ func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetR
 	return items, nil
 }
 
+const getRoomMessagesReactions = `-- name: GetRoomMessagesReactions :many
+SELECT mr.message_id FROM messages_reactions mr 
+LEFT JOIN messages m ON m.id = mr.message_id 
+WHERE m.room_id = $1 AND mr.user_id = $2
+`
+
+type GetRoomMessagesReactionsParams struct {
+	RoomID uuid.UUID `db:"room_id" json:"room_id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *Queries) GetRoomMessagesReactions(ctx context.Context, arg GetRoomMessagesReactionsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, getRoomMessagesReactions, arg.RoomID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var message_id uuid.UUID
+		if err := rows.Scan(&message_id); err != nil {
+			return nil, err
+		}
+		items = append(items, message_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRoomWithUser = `-- name: GetRoomWithUser :one
 SELECT
   r."id", r."name", r."description", r."created_at", r."updated_at", u."email", u."name" as "creator_name", u."id" as "user_id", u."photo", u."enable_picture"
