@@ -92,7 +92,7 @@ const getRoom = `-- name: GetRoom :one
 SELECT id, name, created_at, updated_at, user_id, description FROM rooms WHERE id = $1
 `
 
-func (q *Queries) GetRoom(ctx context.Context, id uuid.UUID) (Room, error) {
+func (q *Queries) GetRoom(ctx context.Context, id int64) (Room, error) {
 	row := q.db.QueryRow(ctx, getRoom, id)
 	var i Room
 	err := row.Scan(
@@ -114,7 +114,7 @@ WHERE room_id = $1 GROUP BY m.id ORDER BY created_at DESC
 
 type GetRoomMessagesRow struct {
 	ID            uuid.UUID        `db:"id" json:"id"`
-	RoomID        uuid.UUID        `db:"room_id" json:"room_id"`
+	RoomID        int64            `db:"room_id" json:"room_id"`
 	Message       string           `db:"message" json:"message"`
 	Answered      bool             `db:"answered" json:"answered"`
 	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
@@ -123,7 +123,7 @@ type GetRoomMessagesRow struct {
 	ReactionCount int64            `db:"reaction_count" json:"reaction_count"`
 }
 
-func (q *Queries) GetRoomMessages(ctx context.Context, roomID uuid.UUID) ([]GetRoomMessagesRow, error) {
+func (q *Queries) GetRoomMessages(ctx context.Context, roomID int64) ([]GetRoomMessagesRow, error) {
 	rows, err := q.db.Query(ctx, getRoomMessages, roomID)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ WHERE m.room_id = $1 AND mr.user_id = $2
 `
 
 type GetRoomMessagesReactionsParams struct {
-	RoomID uuid.UUID `db:"room_id" json:"room_id"`
+	RoomID int64     `db:"room_id" json:"room_id"`
 	UserID uuid.UUID `db:"user_id" json:"user_id"`
 }
 
@@ -192,7 +192,7 @@ WHERE r.id = $1
 `
 
 type GetRoomWithUserRow struct {
-	ID            uuid.UUID        `db:"id" json:"id"`
+	ID            int64            `db:"id" json:"id"`
 	Name          string           `db:"name" json:"name"`
 	Description   string           `db:"description" json:"description"`
 	CreatedAt     pgtype.Timestamp `db:"created_at" json:"created_at"`
@@ -204,7 +204,7 @@ type GetRoomWithUserRow struct {
 	EnablePicture pgtype.Bool      `db:"enable_picture" json:"enable_picture"`
 }
 
-func (q *Queries) GetRoomWithUser(ctx context.Context, id uuid.UUID) (GetRoomWithUserRow, error) {
+func (q *Queries) GetRoomWithUser(ctx context.Context, id int64) (GetRoomWithUserRow, error) {
 	row := q.db.QueryRow(ctx, getRoomWithUser, id)
 	var i GetRoomWithUserRow
 	err := row.Scan(
@@ -229,7 +229,7 @@ ORDER BY r.created_at ASC
 `
 
 type GetRoomsRow struct {
-	ID          uuid.UUID        `db:"id" json:"id"`
+	ID          int64            `db:"id" json:"id"`
 	Name        string           `db:"name" json:"name"`
 	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
 	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
@@ -318,8 +318,8 @@ RETURNING "id", "created_at"
 `
 
 type InsertMessageParams struct {
-	RoomID  uuid.UUID `db:"room_id" json:"room_id"`
-	Message string    `db:"message" json:"message"`
+	RoomID  int64  `db:"room_id" json:"room_id"`
+	Message string `db:"message" json:"message"`
 }
 
 type InsertMessageRow struct {
@@ -374,7 +374,7 @@ type InsertRoomParams struct {
 }
 
 type InsertRoomRow struct {
-	ID        uuid.UUID        `db:"id" json:"id"`
+	ID        int64            `db:"id" json:"id"`
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 

@@ -20,7 +20,7 @@ func NewMessageService(queries *pgstore.Queries) *MessageService {
 	return &MessageService{Queries: queries}
 }
 
-func (s *MessageService) CreateMessage(ctx context.Context, roomID uuid.UUID, msg string) (pgstore.InsertMessageRow, error) {
+func (s *MessageService) CreateMessage(ctx context.Context, roomID int64, msg string) (pgstore.InsertMessageRow, error) {
 	message, err := s.Queries.InsertMessage(ctx, pgstore.InsertMessageParams{
 		RoomID:  roomID,
 		Message: msg,
@@ -29,7 +29,7 @@ func (s *MessageService) CreateMessage(ctx context.Context, roomID uuid.UUID, ms
 	return message, err
 }
 
-func (s *MessageService) GetMessages(ctx context.Context, roomID uuid.UUID) ([]pgstore.GetRoomMessagesRow, error) {
+func (s *MessageService) GetMessages(ctx context.Context, roomID int64) ([]pgstore.GetRoomMessagesRow, error) {
 	roomMessages, err := s.Queries.GetRoomMessages(ctx, roomID)
 
 	if roomMessages == nil {
@@ -114,7 +114,7 @@ func (s *MessageService) RemoveReactionFromMessage(ctx context.Context, messageI
 	return int32(count), nil
 }
 
-func (s *MessageService) GetRoomMessagesReactions(ctx context.Context, roomID, userID uuid.UUID) ([]string, error) {
+func (s *MessageService) GetRoomMessagesReactions(ctx context.Context, roomID int64, userID uuid.UUID) ([]string, error) {
 	params := pgstore.GetRoomMessagesReactionsParams{
 		RoomID: roomID,
 		UserID: userID,

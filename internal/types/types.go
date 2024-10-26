@@ -32,11 +32,11 @@ type MessageAnswered struct {
 type Message struct {
 	Kind   string `json:"kind"`
 	Value  any    `json:"value"`
-	RoomID string `json:"-"`
+	RoomID int64  `json:"-"`
 }
 
 type RoomCreated struct {
-	ID          string `json:"id"`
+	ID          int64  `json:"id"`
 	CreatedAt   string `json:"created_at"`
 	Name        string `json:"name"`
 	UserID      string `json:"user_id"`

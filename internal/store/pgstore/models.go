@@ -11,7 +11,7 @@ import (
 
 type Message struct {
 	ID        uuid.UUID        `db:"id" json:"id"`
-	RoomID    uuid.UUID        `db:"room_id" json:"room_id"`
+	RoomID    int64            `db:"room_id" json:"room_id"`
 	Message   string           `db:"message" json:"message"`
 	Answered  bool             `db:"answered" json:"answered"`
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
@@ -25,7 +25,7 @@ type MessagesReaction struct {
 }
 
 type Room struct {
-	ID          uuid.UUID        `db:"id" json:"id"`
+	ID          int64            `db:"id" json:"id"`
 	Name        string           `db:"name" json:"name"`
 	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
 	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`

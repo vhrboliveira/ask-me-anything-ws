@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/vhrboliveira/ama-go/internal/auth"
 	"github.com/vhrboliveira/ama-go/internal/service"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
-	types "github.com/vhrboliveira/ama-go/internal/utils"
+	"github.com/vhrboliveira/ama-go/internal/types"
 )
 
 type Handlers struct {
@@ -117,7 +118,7 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type response struct {
-		ID          string `json:"id"`
+		ID          int64  `json:"id"`
 		UserID      string `json:"user_id"`
 		CreatedAt   string `json:"created_at"`
 		Description string `json:"description"`
@@ -126,13 +127,13 @@ func (h *Handlers) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	createdAt := room.CreatedAt.Time.Format(time.RFC3339)
 
 	w.WriteHeader(http.StatusCreated)
-	sendJSON(w, response{ID: room.ID.String(), UserID: userID.String(), CreatedAt: createdAt, Description: body.Description})
+	sendJSON(w, response{ID: room.ID, UserID: userID.String(), CreatedAt: createdAt, Description: body.Description})
 
 	go h.WebsocketService.NotifyRoomsListClients(types.Message{
 		Kind:   types.MessageKindRoomCreated,
-		RoomID: room.ID.String(),
+		RoomID: room.ID,
 		Value: types.RoomCreated{
-			ID:          room.ID.String(),
+			ID:          room.ID,
 			CreatedAt:   createdAt,
 			Name:        body.Name,
 			UserID:      userID.String(),
@@ -155,7 +156,7 @@ func (h *Handlers) GetRooms(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GetRoom(w http.ResponseWriter, r *http.Request) {
 	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
+	roomID, err := strconv.ParseInt(rawRoomID, 10, 64)
 	if err != nil {
 		slog.Error("invalid room id", "error", err)
 		http.Error(w, "invalid room id", http.StatusBadRequest)
@@ -188,7 +189,7 @@ func (h *Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
+	roomID, err := strconv.ParseInt(rawRoomID, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
@@ -229,13 +230,13 @@ func (h *Handlers) CreateRoomMessage(w http.ResponseWriter, r *http.Request) {
 	go h.WebsocketService.NotifyRoomClient(types.Message{
 		Kind:   types.MessageKindMessageCreated,
 		Value:  types.MessageCreated{ID: message.ID.String(), CreatedAt: message.CreatedAt.Time.Format(time.RFC3339), Message: body.Message},
-		RoomID: rawRoomID,
+		RoomID: roomID,
 	})
 }
 
 func (h *Handlers) GetRoomMessages(w http.ResponseWriter, r *http.Request) {
 	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
+	roomID, err := strconv.ParseInt(rawRoomID, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
@@ -260,7 +261,7 @@ func (h *Handlers) GetRoomMessages(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GetRoomMessage(w http.ResponseWriter, r *http.Request) {
 	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
+	roomID, err := strconv.ParseInt(rawRoomID, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
@@ -306,7 +307,7 @@ func (h *Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
+	roomID, err := strconv.ParseInt(rawRoomID, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
@@ -389,7 +390,7 @@ func (h *Handlers) ReactionToMessage(w http.ResponseWriter, r *http.Request) {
 
 	go h.WebsocketService.NotifyRoomClient(types.Message{
 		Kind:   types.MessageKindMessageReactionAdd,
-		RoomID: rawRoomID,
+		RoomID: roomID,
 		Value: types.MessageReactionAdded{
 			ID:    rawMessageID,
 			Count: count,
@@ -407,7 +408,7 @@ func (h *Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Requ
 	}
 
 	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
+	roomID, err := strconv.ParseInt(rawRoomID, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
@@ -490,7 +491,7 @@ func (h *Handlers) RemoveReactionFromMessage(w http.ResponseWriter, r *http.Requ
 
 	go h.WebsocketService.NotifyRoomClient(types.Message{
 		Kind:   types.MessageKindMessageReactionRemoved,
-		RoomID: rawRoomID,
+		RoomID: roomID,
 		Value: types.MessageReactionRemoved{
 			ID:    rawMessageID,
 			Count: count,
@@ -505,7 +506,7 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 	}
 
 	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
+	roomID, err := strconv.ParseInt(rawRoomID, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
@@ -601,7 +602,7 @@ func (h *Handlers) SetMessageToAnswered(w http.ResponseWriter, r *http.Request) 
 
 	go h.WebsocketService.NotifyRoomClient(types.Message{
 		Kind:   types.MessageKindMessageAnswered,
-		RoomID: rawRoomID,
+		RoomID: roomID,
 		Value: types.MessageAnswered{
 			ID:     rawMessageID,
 			Answer: body.Answer,
@@ -615,7 +616,7 @@ func (h *Handlers) GetRoomMessagesReactions(w http.ResponseWriter, r *http.Reque
 	}
 
 	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
+	roomID, err := strconv.ParseInt(rawRoomID, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
@@ -772,7 +773,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) SubscribeToRoom(w http.ResponseWriter, r *http.Request) {
 	rawRoomID := chi.URLParam(r, "room_id")
-	roomID, err := uuid.Parse(rawRoomID)
+	roomID, err := strconv.ParseInt(rawRoomID, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid room id", http.StatusBadRequest)
 		return
@@ -795,7 +796,7 @@ func (h *Handlers) SubscribeToRoom(w http.ResponseWriter, r *http.Request) {
 	defer c.Close()
 
 	ctx, cancel := context.WithCancel(r.Context())
-	h.WebsocketService.SubscribeToRoom(c, ctx, cancel, rawRoomID, r.RemoteAddr)
+	h.WebsocketService.SubscribeToRoom(c, ctx, cancel, roomID, r.RemoteAddr)
 }
 
 func (h Handlers) SubscribeToRoomsList(w http.ResponseWriter, r *http.Request) {

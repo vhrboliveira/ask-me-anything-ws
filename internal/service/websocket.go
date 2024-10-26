@@ -8,12 +8,12 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	types "github.com/vhrboliveira/ama-go/internal/utils"
+	"github.com/vhrboliveira/ama-go/internal/types"
 )
 
 type WebSocketService struct {
 	Upgrader             websocket.Upgrader
-	RoomSubscribers      map[string]map[*websocket.Conn]context.CancelFunc
+	RoomSubscribers      map[int64]map[*websocket.Conn]context.CancelFunc
 	RoomsListSubscribers map[*websocket.Conn]context.CancelFunc
 	Mutex                *sync.RWMutex
 }
@@ -36,13 +36,13 @@ func NewWebSocketService() *WebSocketService {
 			}
 			return r.Header.Get("Origin") == url
 		}},
-		RoomSubscribers:      make(map[string]map[*websocket.Conn]context.CancelFunc),
+		RoomSubscribers:      make(map[int64]map[*websocket.Conn]context.CancelFunc),
 		RoomsListSubscribers: make(map[*websocket.Conn]context.CancelFunc),
 		Mutex:                &sync.RWMutex{},
 	}
 }
 
-func (w *WebSocketService) SubscribeToRoom(c *websocket.Conn, ctx context.Context, cancel context.CancelFunc, roomID string, ip string) {
+func (w *WebSocketService) SubscribeToRoom(c *websocket.Conn, ctx context.Context, cancel context.CancelFunc, roomID int64, ip string) {
 	w.Mutex.Lock()
 	if _, ok := w.RoomSubscribers[roomID]; !ok {
 		w.RoomSubscribers[roomID] = make(map[*websocket.Conn]context.CancelFunc)

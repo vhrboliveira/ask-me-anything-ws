@@ -39,7 +39,7 @@ func (s *RoomService) GetRooms(ctx context.Context) ([]pgstore.GetRoomsRow, erro
 	return rooms, err
 }
 
-func (s *RoomService) GetRoom(ctx context.Context, roomID uuid.UUID) (pgstore.GetRoomWithUserRow, error) {
+func (s *RoomService) GetRoom(ctx context.Context, roomID int64) (pgstore.GetRoomWithUserRow, error) {
 	room, err := s.Queries.GetRoomWithUser(ctx, roomID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -52,7 +52,7 @@ func (s *RoomService) GetRoom(ctx context.Context, roomID uuid.UUID) (pgstore.Ge
 	return room, err
 }
 
-func (s *RoomService) CheckRoomExists(ctx context.Context, roomID uuid.UUID) (int, error) {
+func (s *RoomService) CheckRoomExists(ctx context.Context, roomID int64) (int, error) {
 	_, err := s.Queries.GetRoom(ctx, roomID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
