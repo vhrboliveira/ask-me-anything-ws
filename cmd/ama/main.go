@@ -21,16 +21,9 @@ import (
 var pool *pgxpool.Pool
 
 func main() {
-	env := os.Getenv("GO_ENV")
-	if env == "" {
-		env = "dev"
-	}
-
-	if env != "production" {
-		if err := godotenv.Load(); err != nil {
-			slog.Error("unable to load .env file")
-			panic(err)
-		}
+	if err := godotenv.Load(); err != nil {
+		slog.Error("unable to load .env file")
+		panic(err)
 	}
 
 	connectToDB()
