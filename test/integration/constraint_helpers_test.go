@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
 )
@@ -75,7 +74,7 @@ func setMessagesReactionsConstraint(t testing.TB) {
 	require.NoError(t, err, "failed to set constraint when setting message reaction constraint")
 }
 
-func setAnswerMessageConstraintFailure(t testing.TB, roomID uuid.UUID) {
+func setAnswerMessageConstraintFailure(t testing.TB, roomID int64) {
 	t.Helper()
 
 	ctx := context.Background()

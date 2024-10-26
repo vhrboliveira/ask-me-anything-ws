@@ -5,13 +5,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	types "github.com/vhrboliveira/ama-go/internal/utils"
+	"github.com/vhrboliveira/ama-go/internal/types"
 )
 
 func TestAnswerMessage(t *testing.T) {
@@ -29,7 +30,7 @@ func TestAnswerMessage(t *testing.T) {
 		msgID, _ := createAndGetMessages(t, room.ID)
 		answer := "This is the answer to this message"
 		payload := strings.NewReader(`{"user_id": "` + room.UserID.String() + `", "answer": "` + answer + `"}`)
-		rr := execAuthenticatedRequest(t, method, baseURL+room.ID.String()+"/messages/"+msgID+"/answer", payload)
+		rr := execAuthenticatedRequest(t, method, baseURL+strconv.Itoa(int(room.ID))+"/messages/"+msgID+"/answer", payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -51,11 +52,11 @@ func TestAnswerMessage(t *testing.T) {
 		msgID, _ := createAndGetMessages(t, room.ID)
 		answer := "This is the answer to this message"
 		payload := strings.NewReader(`{"user_id": "` + room.UserID.String() + `", "answer": "` + answer + `"}`)
-		_ = execAuthenticatedRequest(t, method, baseURL+room.ID.String()+"/messages/"+msgID+"/answer", payload)
+		_ = execAuthenticatedRequest(t, method, baseURL+strconv.Itoa(int(room.ID))+"/messages/"+msgID+"/answer", payload)
 
 		anotherAnswer := "I'm trying to change the previous answer"
 		payload = strings.NewReader(`{"user_id": "` + room.UserID.String() + `", "answer": "` + anotherAnswer + `"}`)
-		rr := execAuthenticatedRequest(t, method, baseURL+room.ID.String()+"/messages/"+msgID+"/answer", payload)
+		rr := execAuthenticatedRequest(t, method, baseURL+strconv.Itoa(int(room.ID))+"/messages/"+msgID+"/answer", payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -75,14 +76,14 @@ func TestAnswerMessage(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String()
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + strconv.Itoa(int(room.ID))
 		ws, err := connectAuthenticatedWS(t, wsURL)
 		require.NoError(t, err)
 		defer ws.Close()
 
 		answer := "This is the answer to this message"
 		payload := strings.NewReader(`{"user_id": "` + room.UserID.String() + `", "answer": "` + answer + `"}`)
-		rr := execAuthenticatedRequest(t, method, baseURL+room.ID.String()+"/messages/"+msgID+"/answer", payload)
+		rr := execAuthenticatedRequest(t, method, baseURL+strconv.Itoa(int(room.ID))+"/messages/"+msgID+"/answer", payload)
 		response := rr.Result()
 		defer response.Body.Close()
 
@@ -108,6 +109,7 @@ func TestAnswerMessage(t *testing.T) {
 	truncateData(t)
 	fakeID := uuid.New().String()
 	room := createAndGetRoom(t)
+	fakeRoomID := strconv.Itoa(int(room.ID + 10))
 	gothUser := mockGothUser(nil)
 	userID := getUserIDByEmail(t, gothUser.Email)
 	answer := "any answer here"
@@ -132,7 +134,7 @@ func TestAnswerMessage(t *testing.T) {
 			payload:            `{"user_id": "` + userID + `", "answer": "` + answer + `"}`,
 			expectedMessage:    "unauthorized, session not found or invalid\n",
 			expectedStatusCode: http.StatusUnauthorized,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			setConstraint:      nil,
 		},
 		{
@@ -143,7 +145,7 @@ func TestAnswerMessage(t *testing.T) {
 			payload:            `{"user_id": "` + userID + `", "answer": "` + answer + `"}`,
 			expectedMessage:    "unauthorized, session not found or invalid\n",
 			expectedStatusCode: http.StatusUnauthorized,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			setConstraint:      nil,
 		},
 		{
@@ -152,7 +154,7 @@ func TestAnswerMessage(t *testing.T) {
 			payload:            `{ "invalid": "field" }`,
 			expectedMessage:    "validation failed, missing required field(s): UserID, Answer\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			setConstraint:      nil,
 		},
 		{
@@ -161,7 +163,7 @@ func TestAnswerMessage(t *testing.T) {
 			payload:            "aaaaaaa",
 			expectedMessage:    "invalid body\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			setConstraint:      nil,
 		},
 		{
@@ -178,7 +180,7 @@ func TestAnswerMessage(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed, missing required field(s): UserID\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			payload:            `{"answer": "` + answer + `"}`,
 			setConstraint:      nil,
 		},
@@ -187,7 +189,7 @@ func TestAnswerMessage(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed, missing required field(s): UserID\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			payload:            `{"answer": "` + answer + `", "user_id": ""}`,
 			setConstraint:      nil,
 		},
@@ -196,7 +198,7 @@ func TestAnswerMessage(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed: UserID must be a valid UUID\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			payload:            `{"user_id": "invalid-uuid", "answer": "` + answer + `"}`,
 			setConstraint:      nil,
 		},
@@ -205,7 +207,7 @@ func TestAnswerMessage(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed, missing required field(s): Answer\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			payload:            `{"user_id": "` + userID + `"}`,
 			setConstraint:      nil,
 		},
@@ -214,7 +216,7 @@ func TestAnswerMessage(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed, missing required field(s): Answer\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			payload:            `{"user_id": "` + userID + `", "answer": "    "}`,
 			setConstraint:      nil,
 		},
@@ -224,7 +226,7 @@ func TestAnswerMessage(t *testing.T) {
 			payload:            `{"user_id": "` + userID + `", "answer": "` + answer + `"}`,
 			expectedMessage:    "room not found\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages/" + fakeID + "/answer",
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID + "/answer",
 			setConstraint:      nil,
 		},
 		{
@@ -233,7 +235,7 @@ func TestAnswerMessage(t *testing.T) {
 			payload:            `{"user_id": "` + userID + `", "answer": "` + answer + `"}`,
 			expectedMessage:    "invalid message id\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + room.ID.String() + "/messages/invalid_message_id/answer",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/invalid_message_id/answer",
 			setConstraint:      nil,
 		},
 		{
@@ -242,7 +244,7 @@ func TestAnswerMessage(t *testing.T) {
 			payload:            `{"user_id": "` + userID + `", "answer": "` + answer + `"}`,
 			expectedMessage:    "message not found\n",
 			expectedStatusCode: http.StatusNotFound,
-			url:                baseURL + room.ID.String() + "/messages/" + fakeID + "/answer",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + fakeID + "/answer",
 			setConstraint:      nil,
 		},
 		{
@@ -251,7 +253,7 @@ func TestAnswerMessage(t *testing.T) {
 			payload:            `{"user_id": "` + userID + `", "answer": "` + answer + `"}`,
 			expectedMessage:    "error validating message ID\n",
 			expectedStatusCode: http.StatusInternalServerError,
-			url:                baseURL + room.ID.String() + "/messages/" + fakeID + "/answer",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + fakeID + "/answer",
 			setConstraint: func(t *testing.T) {
 				setMessagesConstraintFailure(t)
 			},
@@ -270,7 +272,7 @@ func TestAnswerMessage(t *testing.T) {
 				setAnswerMessageConstraintFailure(t, room.ID)
 				msgID, _ := createAndGetMessages(t, room.ID)
 
-				newURL = baseURL + room.ID.String() + "/messages/" + msgID + "/answer"
+				newURL = baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/answer"
 				newPayload = `{"user_id": "` + room.UserID.String() + `", "answer": "` + answer + `"}`
 			},
 		},

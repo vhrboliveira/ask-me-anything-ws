@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -31,7 +32,7 @@ func TestGetRoomMessagesReactions(t *testing.T) {
 		setMessageReactionWithUserID(t, msgID, userID)
 		setMessageReactionWithUserID(t, msgID2, userID)
 
-		newURL := baseURL + room.ID.String() + "/reactions?user_id=" + userID
+		newURL := baseURL + strconv.Itoa(int(room.ID)) + "/reactions?user_id=" + userID
 		rr := execAuthenticatedRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
@@ -54,7 +55,7 @@ func TestGetRoomMessagesReactions(t *testing.T) {
 		room := createAndGetRoom(t)
 		userID := getUserIDByEmail(t, gothUser.Email)
 
-		newURL := baseURL + room.ID.String() + "/reactions?user_id=" + userID
+		newURL := baseURL + strconv.Itoa(int(room.ID)) + "/reactions?user_id=" + userID
 		rr := execAuthenticatedRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
@@ -74,6 +75,7 @@ func TestGetRoomMessagesReactions(t *testing.T) {
 	truncateData(t)
 	fakeID := uuid.New().String()
 	room := createAndGetRoom(t)
+	fakeRoomID := strconv.Itoa(int(room.ID + 10))
 	userID := getUserIDByEmail(t, gothUser.Email)
 
 	type constraintFn func(t *testing.T)
@@ -91,21 +93,21 @@ func TestGetRoomMessagesReactions(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed, missing required field(s): UserID\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + room.ID.String() + "/reactions",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/reactions",
 		},
 		{
 			name:               "returns error if user ID is not a valid UUID",
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "invalid user ID\n",
 			expectedStatusCode: http.StatusForbidden,
-			url:                baseURL + room.ID.String() + "/reactions?user_id=invalid-user-id",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/reactions?user_id=invalid-user-id",
 		},
 		{
 			name:               "returns error if user ID is not the same from the session cookie",
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "invalid user ID\n",
 			expectedStatusCode: http.StatusForbidden,
-			url:                baseURL + room.ID.String() + "/reactions?user_id=" + fakeID,
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/reactions?user_id=" + fakeID,
 		},
 		{
 			name: "returns unauthorized error if sessionID is not found",
@@ -114,7 +116,7 @@ func TestGetRoomMessagesReactions(t *testing.T) {
 			},
 			expectedMessage:    "unauthorized, session not found or invalid\n",
 			expectedStatusCode: http.StatusUnauthorized,
-			url:                baseURL + room.ID.String() + "/reactions?user_id=" + userID,
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/reactions?user_id=" + userID,
 			setConstraint:      nil,
 		},
 		{
@@ -124,7 +126,7 @@ func TestGetRoomMessagesReactions(t *testing.T) {
 			},
 			expectedMessage:    "unauthorized, session not found or invalid\n",
 			expectedStatusCode: http.StatusUnauthorized,
-			url:                baseURL + room.ID.String() + "/reactions?user_id=" + userID,
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/reactions?user_id=" + userID,
 			setConstraint:      nil,
 		},
 		{
@@ -140,7 +142,7 @@ func TestGetRoomMessagesReactions(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "room not found\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/reactions?user_id=" + userID,
+			url:                baseURL + fakeRoomID + "/reactions?user_id=" + userID,
 			setConstraint:      nil,
 		},
 		{
@@ -148,7 +150,7 @@ func TestGetRoomMessagesReactions(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error getting messages reactions\n",
 			expectedStatusCode: http.StatusInternalServerError,
-			url:                baseURL + room.ID.String() + "/reactions?user_id=" + userID,
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/reactions?user_id=" + userID,
 			setConstraint: func(t *testing.T) {
 				setMessagesReactionsConstraint(t)
 			},

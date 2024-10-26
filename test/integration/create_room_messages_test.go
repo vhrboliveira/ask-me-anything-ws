@@ -5,13 +5,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	types "github.com/vhrboliveira/ama-go/internal/utils"
+	"github.com/vhrboliveira/ama-go/internal/types"
 )
 
 func TestCreateRoomMessages(t *testing.T) {
@@ -26,7 +27,7 @@ func TestCreateRoomMessages(t *testing.T) {
 		truncateData(t)
 
 		room := createAndGetRoom(t)
-		newURL := strings.Replace(baseURL, "room_id", room.ID.String(), 1)
+		newURL := strings.Replace(baseURL, "room_id", strconv.Itoa(int(room.ID)), 1)
 		payload := strings.NewReader(`{"message": "Is Go awesome?"}`)
 		rr := execAuthenticatedRequest(t, method, newURL, payload)
 
@@ -54,13 +55,13 @@ func TestCreateRoomMessages(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String()
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + strconv.Itoa(int(room.ID))
 		ws, err := connectAuthenticatedWS(t, wsURL)
 		require.NoError(t, err)
 		defer ws.Close()
 
 		want := "Is Go awesome?"
-		newURL := strings.Replace(baseURL, "room_id", room.ID.String(), 1)
+		newURL := strings.Replace(baseURL, "room_id", strconv.Itoa(int(room.ID)), 1)
 		payload := strings.NewReader(`{"message": "` + want + `"}`)
 		rr := execAuthenticatedRequest(t, method, newURL, payload)
 
@@ -99,6 +100,7 @@ func TestCreateRoomMessages(t *testing.T) {
 	type constraintFn func(t *testing.T)
 	fakeID := uuid.New().String()
 	room := createAndGetRoom(t)
+	fakeRoomID := strconv.Itoa(int(room.ID + 10))
 
 	errorTestCases := []struct {
 		name               string
@@ -145,7 +147,7 @@ func TestCreateRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "room not found\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                strings.Replace(baseURL, "room_id", fakeID, 1),
+			url:                strings.Replace(baseURL, "room_id", fakeRoomID, 1),
 			payload:            `{"message": "Is Go awesome?"}`,
 			setConstraint:      nil,
 		},
@@ -154,7 +156,7 @@ func TestCreateRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed: missing required field(s): message\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                strings.Replace(baseURL, "room_id", room.ID.String(), 1),
+			url:                strings.Replace(baseURL, "room_id", strconv.Itoa(int(room.ID)), 1),
 			payload:            `{"invalid": "invalid"}`,
 			setConstraint:      nil,
 		},
@@ -163,7 +165,7 @@ func TestCreateRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "invalid body\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                strings.Replace(baseURL, "room_id", room.ID.String(), 1),
+			url:                strings.Replace(baseURL, "room_id", strconv.Itoa(int(room.ID)), 1),
 			payload:            "aaaaaa",
 			setConstraint:      nil,
 		},
@@ -172,7 +174,7 @@ func TestCreateRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "invalid body\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                strings.Replace(baseURL, "room_id", room.ID.String(), 1),
+			url:                strings.Replace(baseURL, "room_id", strconv.Itoa(int(room.ID)), 1),
 			payload:            `[{"message": "a valid message"}, {"message": "another valid message"}]`,
 			setConstraint:      nil,
 		},
@@ -181,7 +183,7 @@ func TestCreateRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error validating room ID\n",
 			expectedStatusCode: http.StatusInternalServerError,
-			url:                strings.Replace(baseURL, "room_id", fakeID, 1),
+			url:                strings.Replace(baseURL, "room_id", fakeRoomID, 1),
 			payload:            `{"message": "a valid message"}`,
 			setConstraint: func(t *testing.T) {
 				setRoomsConstraintFailure(t)
@@ -192,7 +194,7 @@ func TestCreateRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error inserting message\n",
 			expectedStatusCode: http.StatusInternalServerError,
-			url:                strings.Replace(baseURL, "room_id", room.ID.String(), 1),
+			url:                strings.Replace(baseURL, "room_id", strconv.Itoa(int(room.ID)), 1),
 			payload:            `{"message": "a valid message"}`,
 			setConstraint: func(t *testing.T) {
 				setMessagesConstraintFailure(t)

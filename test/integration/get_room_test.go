@@ -42,7 +42,7 @@ func TestGetRoom(t *testing.T) {
 		}
 
 		for _, result := range results {
-			assertValidUUID(t, result.ID.String())
+			assert.NotEmpty(t, result.ID)
 			assertValidUUID(t, result.UserID.String())
 			assertValidDate(t, result.CreatedAt.Time.Format(time.RFC3339))
 

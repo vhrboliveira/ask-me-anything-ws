@@ -347,7 +347,7 @@ func getMessageIDByMessage(t testing.TB, message string) string {
 	return id.String()
 }
 
-func createAndGetMessages(t testing.TB, roomID uuid.UUID) (msgID, message string) {
+func createAndGetMessages(t testing.TB, roomID int64) (msgID, message string) {
 	t.Helper()
 
 	msgs := []pgstore.InsertMessageParams{

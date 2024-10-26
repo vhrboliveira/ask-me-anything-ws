@@ -3,6 +3,7 @@ package api_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -37,7 +38,7 @@ func TestSubscribeToRoom(t *testing.T) {
 
 			if tc.addRoom {
 				room := createAndGetRoom(t)
-				wsURL += "/room/" + room.ID.String()
+				wsURL += "/room/" + strconv.Itoa(int(room.ID))
 			}
 
 			ws, err := connectAuthenticatedWS(t, wsURL)

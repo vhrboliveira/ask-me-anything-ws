@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
-	types "github.com/vhrboliveira/ama-go/internal/utils"
+	"github.com/vhrboliveira/ama-go/internal/types"
 )
 
 func TestCreateRoom(t *testing.T) {
@@ -50,8 +50,8 @@ func TestCreateRoom(t *testing.T) {
 			require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
 
 			assert.Equal(t, response.StatusCode, http.StatusCreated)
-			assertValidUUID(t, result.ID.String())
 			assertValidDate(t, result.CreatedAt.Time.Format(time.RFC3339))
+			assert.NotEmpty(t, result.ID)
 			assert.True(t, result.CreatedAt.Valid)
 			assert.Equal(t, result.UserID.String(), userID)
 			assert.Equal(t, result.Description, tc.description)
@@ -82,7 +82,7 @@ func TestCreateRoom(t *testing.T) {
 		defer response.Body.Close()
 
 		var result struct {
-			ID          string `json:"id"`
+			ID          int64  `json:"id"`
 			CreatedAt   string `json:"created_at"`
 			UserID      string `json:"user_id"`
 			Description string `json:"description"`

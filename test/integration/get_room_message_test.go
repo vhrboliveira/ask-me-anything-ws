@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -34,7 +35,7 @@ func TestGetRoomMessages(t *testing.T) {
 		insertMessages(t, msgs)
 		answerMessages(t, answer)
 
-		newURL := baseURL + room.ID.String() + "/messages"
+		newURL := baseURL + strconv.Itoa(int(room.ID)) + "/messages"
 		rr := execAuthenticatedRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
@@ -72,7 +73,7 @@ func TestGetRoomMessages(t *testing.T) {
 		answer := "This is answered!"
 		answerMessageByID(t, messageID, answer)
 
-		newURL := baseURL + room.ID.String() + "/messages/" + messageID
+		newURL := baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + messageID
 		rr := execAuthenticatedRequest(t, method, newURL, nil)
 		response := rr.Result()
 		defer response.Body.Close()
@@ -82,7 +83,7 @@ func TestGetRoomMessages(t *testing.T) {
 
 		assertValidUUID(t, result.ID.String())
 		assert.Equal(t, messageTxt, result.Message)
-		assert.Equal(t, room.ID.String(), result.RoomID.String())
+		assert.Equal(t, room.ID, result.RoomID)
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 		assert.True(t, result.CreatedAt.Valid, "expected created at to be not empty")
 		assert.True(t, result.Answered, "expected answered to be true")
@@ -93,6 +94,7 @@ func TestGetRoomMessages(t *testing.T) {
 	truncateData(t)
 	fakeID := uuid.New().String()
 	room := createAndGetRoom(t)
+	fakeRoomID := strconv.Itoa(int(room.ID + 10))
 	type constraintFn func(t *testing.T)
 	var newURL string
 
@@ -165,7 +167,7 @@ func TestGetRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "room not found\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages",
+			url:                baseURL + fakeRoomID + "/messages",
 			setConstraint:      nil,
 		},
 		{
@@ -173,7 +175,7 @@ func TestGetRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "room not found\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + fakeID + "/messages/" + fakeID,
+			url:                baseURL + fakeRoomID + "/messages/" + fakeID,
 			setConstraint:      nil,
 		},
 		{
@@ -181,7 +183,7 @@ func TestGetRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "invalid message id\n",
 			expectedStatusCode: http.StatusBadRequest,
-			url:                baseURL + room.ID.String() + "/messages/invalid_message_id",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/invalid_message_id",
 			setConstraint:      nil,
 		},
 		{
@@ -189,7 +191,7 @@ func TestGetRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "message not found\n",
 			expectedStatusCode: http.StatusNotFound,
-			url:                baseURL + room.ID.String() + "/messages/" + fakeID,
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + fakeID,
 			setConstraint:      nil,
 		},
 		{
@@ -197,7 +199,7 @@ func TestGetRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "[]",
 			expectedStatusCode: http.StatusOK,
-			url:                baseURL + room.ID.String() + "/messages",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages",
 			setConstraint:      nil,
 		},
 		{
@@ -205,7 +207,7 @@ func TestGetRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error getting message\n",
 			expectedStatusCode: http.StatusInternalServerError,
-			url:                baseURL + room.ID.String() + "/messages/" + fakeID,
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + fakeID,
 			setConstraint: func(t *testing.T) {
 				setMessagesConstraintFailure(t)
 			},
@@ -215,7 +217,7 @@ func TestGetRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error validating room ID\n",
 			expectedStatusCode: http.StatusInternalServerError,
-			url:                baseURL + fakeID + "/messages",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages",
 			setConstraint: func(t *testing.T) {
 				setRoomsConstraintFailure(t)
 			},
@@ -225,7 +227,7 @@ func TestGetRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error validating room ID\n",
 			expectedStatusCode: http.StatusInternalServerError,
-			url:                baseURL + fakeID + "/messages/" + fakeID,
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + fakeID,
 			setConstraint: func(t *testing.T) {
 				setRoomsConstraintFailure(t)
 			},
@@ -235,7 +237,7 @@ func TestGetRoomMessages(t *testing.T) {
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error getting room messages\n",
 			expectedStatusCode: http.StatusInternalServerError,
-			url:                baseURL + room.ID.String() + "/messages",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages",
 			setConstraint: func(t *testing.T) {
 				setMessagesConstraintFailure(t)
 			},

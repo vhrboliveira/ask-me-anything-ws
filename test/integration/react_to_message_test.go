@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vhrboliveira/ama-go/internal/store/pgstore"
-	types "github.com/vhrboliveira/ama-go/internal/utils"
+	"github.com/vhrboliveira/ama-go/internal/types"
 )
 
 func TestMessageReaction(t *testing.T) {
@@ -31,7 +31,7 @@ func TestMessageReaction(t *testing.T) {
 
 		room := createAndGetRoom(t)
 		msgID, _ := createAndGetMessages(t, room.ID)
-		newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
+		newURL := baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react"
 
 		var wg sync.WaitGroup
 		var userIDs []string
@@ -76,7 +76,7 @@ func TestMessageReaction(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String()
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + strconv.Itoa(int(room.ID))
 		ws, err := connectAuthenticatedWS(t, wsURL)
 		require.NoError(t, err)
 		defer ws.Close()
@@ -84,7 +84,7 @@ func TestMessageReaction(t *testing.T) {
 		msgID, _ := createAndGetMessages(t, room.ID)
 		userID := getUserIDByEmail(t, gothUser.Email)
 
-		newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
+		newURL := baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react"
 		payload := strings.NewReader(`{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`)
 		rr := execAuthenticatedRequest(t, http.MethodPatch, newURL, payload)
 		response := rr.Result()
@@ -121,7 +121,7 @@ func TestMessageReaction(t *testing.T) {
 		server := httptest.NewServer(Router)
 		defer server.Close()
 
-		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + room.ID.String()
+		wsURL := "ws" + server.URL[4:] + "/subscribe/room/" + strconv.Itoa(int(room.ID))
 		ws, err := connectAuthenticatedWS(t, wsURL)
 		require.NoError(t, err)
 		defer ws.Close()
@@ -131,7 +131,7 @@ func TestMessageReaction(t *testing.T) {
 
 		setMessageReactionWithUserID(t, msgID, userID)
 
-		newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
+		newURL := baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react"
 		payload := strings.NewReader(`{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`)
 		rr := execAuthenticatedRequest(t, http.MethodDelete, newURL, payload)
 		response := rr.Result()
@@ -189,7 +189,7 @@ func TestMessageReaction(t *testing.T) {
 				setMessageReactionWithUserID(t, msgID, userID)
 			}
 
-			newURL := baseURL + room.ID.String() + "/messages/" + msgID + "/react"
+			newURL := baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react"
 
 			payload := strings.NewReader(`{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`)
 			rr := execAuthenticatedRequest(t, tc.method, newURL, payload)
@@ -225,7 +225,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "patch - returns an error if request body is invalid",
 			method:             http.MethodPatch,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            `{ "invalid": "field" }`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed, missing required field(s): UserID\n",
@@ -234,7 +234,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "patch - returns an error if request body is not a valid JSON",
 			method:             http.MethodPatch,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            "aaaaaaaa",
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "invalid body\n",
@@ -243,7 +243,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "patch - returns error if user ID is not a valid UUID",
 			method:             http.MethodPatch,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            `{"user_id": "invalid_uuid"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed: UserID must be a valid UUID\n",
@@ -252,7 +252,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "delete - returns an error if request body is invalid",
 			method:             http.MethodDelete,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            `{ "invalid": "field" }`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed, missing required field(s): UserID\n",
@@ -261,7 +261,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "delete - returns an error if request body is not a valid JSON",
 			method:             http.MethodDelete,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            "aaaaaaaa",
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "invalid body\n",
@@ -270,7 +270,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "delete - returns error if user ID is not a valid UUID",
 			method:             http.MethodDelete,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            `{"user_id": "invalid_uuid"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "validation failed: UserID must be a valid UUID\n",
@@ -279,7 +279,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "returns an error if fails to update message",
 			method:             http.MethodPatch,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error reacting to message\n",
@@ -291,7 +291,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "returns an error if fails to remove reaction from message",
 			method:             http.MethodDelete,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error removing reaction from message\n",
@@ -303,7 +303,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:    "patch - returns unauthorized error if sessionID is not found",
 			method:  http.MethodPatch,
-			url:     baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:     baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload: `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn: func(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
 				return execRequestWithoutCookie(method, url, body)
@@ -314,7 +314,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:    "delete - returns unauthorized error if sessionID is not found",
 			method:  http.MethodDelete,
-			url:     baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:     baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload: `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn: func(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
 				return execRequestWithoutCookie(method, url, body)
@@ -325,7 +325,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:    "patch - returns unauthorized error if cookie is different from the session",
 			method:  http.MethodPatch,
-			url:     baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:     baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload: `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn: func(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
 				return execRequestWithInvalidCookie(method, url, body)
@@ -336,7 +336,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:    "delete - returns unauthorized error if cookie is different from the session",
 			method:  http.MethodDelete,
-			url:     baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:     baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload: `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn: func(t testing.TB, method, url string, body io.Reader) *httptest.ResponseRecorder {
 				return execRequestWithInvalidCookie(method, url, body)
@@ -347,7 +347,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "returns an error when trying to react to message that the user already reacted",
 			method:             http.MethodPatch,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "user has already reacted to the message\n",
@@ -357,7 +357,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "returns an error when trying to remove a reaction from a message the user did not react",
 			method:             http.MethodDelete,
-			url:                baseURL + room.ID.String() + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + msgID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "message reaction not found\n",
@@ -384,7 +384,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "patch - returns an error if room does not exist",
 			method:             http.MethodPatch,
-			url:                baseURL + fakeID + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID+10)) + "/messages/" + msgID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "room not found\n",
@@ -393,7 +393,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "delete - returns an error if room does not exist",
 			method:             http.MethodDelete,
-			url:                baseURL + fakeID + "/messages/" + msgID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID+10)) + "/messages/" + msgID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "room not found\n",
@@ -402,7 +402,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "patch - returns an error if message id is not valid",
 			method:             http.MethodPatch,
-			url:                baseURL + room.ID.String() + "/messages/invalid_message_id/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/invalid_message_id/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "invalid message id\n",
@@ -411,7 +411,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "delete - returns an error if message id is not valid",
 			method:             http.MethodDelete,
-			url:                baseURL + room.ID.String() + "/messages/invalid_message_id/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/invalid_message_id/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "invalid message id\n",
@@ -420,7 +420,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "patch - returns an error if message does not exist",
 			method:             http.MethodPatch,
-			url:                baseURL + room.ID.String() + "/messages/" + fakeID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + fakeID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "message not found\n",
@@ -429,7 +429,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "delete - returns an error if message does not exist",
 			method:             http.MethodDelete,
-			url:                baseURL + room.ID.String() + "/messages/" + fakeID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + fakeID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "message not found\n",
@@ -438,7 +438,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "patch - returns an error if fails to get message",
 			method:             http.MethodPatch,
-			url:                baseURL + room.ID.String() + "/messages/" + fakeID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + fakeID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error validating message ID\n",
@@ -450,7 +450,7 @@ func TestMessageReaction(t *testing.T) {
 		{
 			name:               "delete - returns an error if fails to get message",
 			method:             http.MethodDelete,
-			url:                baseURL + room.ID.String() + "/messages/" + fakeID + "/react",
+			url:                baseURL + strconv.Itoa(int(room.ID)) + "/messages/" + fakeID + "/react",
 			payload:            `{"user_id": "` + userID + `", "message_id": "` + msgID + `"}`,
 			fn:                 execAuthenticatedRequest,
 			expectedMessage:    "error validating message ID\n",
