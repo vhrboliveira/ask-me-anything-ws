@@ -16,7 +16,7 @@ stop:
 	@docker network rm ama-shared-network || true
 	
 docker-up:
-	@docker network create ama-shared-network
+	@docker network create ama-shared-network || true
 	@docker compose --env-file .env -f deploy/compose-dev.yaml up -d --build
 
 docker-test:
@@ -24,7 +24,7 @@ docker-test:
 
 docker-down:
 	@docker compose --env-file .env -f deploy/compose-dev.yaml down
-	@docker network rm ama-shared-network
+	@docker network rm ama-shared-network || true
 
 docker-test-down:
 	@docker compose -f deploy/compose-test.yaml down
