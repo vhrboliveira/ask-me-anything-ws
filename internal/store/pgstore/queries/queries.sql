@@ -96,6 +96,10 @@ WHERE
   id = $1
 RETURNING new_user, updated_at;
 
+-- name: DeleteUser :one
+DELETE FROM users
+WHERE id = $1 RETURNING id;
+
 -- name: GetRoomMessagesReactions :many
 SELECT mr.message_id FROM messages_reactions mr 
 LEFT JOIN messages m ON m.id = mr.message_id 

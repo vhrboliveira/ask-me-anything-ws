@@ -673,6 +673,47 @@ func (h *Handlers) GetUserInfo(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, user)
 }
 
+func (h *Handlers) DeleteUserInfo(w http.ResponseWriter, r *http.Request) {
+	rawUserID := chi.URLParam(r, "user_id")
+	userID, err := uuid.Parse(rawUserID)
+	if err != nil {
+		slog.Error("unable to parse user id", "error", err)
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	user, ok := ctx.Value(auth.UserKey).(pgstore.User)
+	if !ok {
+		slog.Error("user not found on the session cookie")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if user.ID != userID {
+		slog.Error("the provided user ID is different from the session")
+		http.Error(w, "invalid user ID", http.StatusForbidden)
+		return
+	}
+
+	deletedID, err := h.UserService.DeleteUserInfo(ctx, userID)
+	if err != nil || deletedID != userID {
+		slog.Error("error deleting user info", "error", err, "deletedID", deletedID, "userID", userID)
+		http.Error(w, "error deleting user info", http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, auth.GenerateExpiredCookie())
+	err = auth.DeleteSession(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return
+}
+
 func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	type requestBody struct {
 		UserID        string `json:"user_id" validate:"required,uuid"`

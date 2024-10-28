@@ -93,3 +93,7 @@ func (u *UserService) UpdateUser(ctx context.Context, userID uuid.UUID, name str
 
 	return updatedUser.NewUser, updatedUser.UpdatedAt, err
 }
+
+func (u *UserService) DeleteUserInfo(ctx context.Context, userID uuid.UUID) (uuid.UUID, error) {
+	return u.q.DeleteUser(ctx, userID)
+}

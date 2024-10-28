@@ -52,6 +52,7 @@ func SetupRouter(h *web.Handlers, userService *service.UserService, valkeyClient
 
 		router.Route("/api", func(router chi.Router) {
 			router.Get("/user", h.GetUserInfo)
+			router.Delete("/user/{user_id}", h.DeleteUserInfo)
 
 			router.Patch("/profile", h.UpdateProfile)
 

@@ -335,7 +335,7 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	session, err := store.Get(r, SessionName)
 	if err != nil {
 		slog.Error("unauthorized", "error", err)
-		http.SetCookie(w, generateExpiredCookie())
+		http.SetCookie(w, GenerateExpiredCookie())
 		http.Redirect(w, r, SITE_URL, http.StatusTemporaryRedirect)
 		return
 	}
@@ -343,7 +343,7 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	sessionID, ok := session.Values["sessionID"].(string)
 	if !ok {
 		slog.Error("sessionID not found in session")
-		http.SetCookie(w, generateExpiredCookie())
+		http.SetCookie(w, GenerateExpiredCookie())
 		http.Redirect(w, r, SITE_URL, http.StatusTemporaryRedirect)
 		return
 	}
@@ -351,9 +351,8 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	result := cache.Do(ctx, cache.B().Del().Key(sessionID).Build())
 	if result.Error() != nil {
-		slog.Error("Failed to delete session", "error", result.Error())
-		http.SetCookie(w, generateExpiredCookie())
-		http.Error(w, "Failed to delete session", http.StatusInternalServerError)
+		slog.Error("failed to delete session from cache", "error", result.Error())
+		http.Error(w, "failed to delete session", http.StatusInternalServerError)
 		return
 	}
 
@@ -363,7 +362,7 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	err = session.Save(r, w)
 	if err != nil {
 		slog.Error("Failed to save session", "error", err)
-		http.SetCookie(w, generateExpiredCookie())
+		http.SetCookie(w, GenerateExpiredCookie())
 		http.Error(w, "Failed to save session", http.StatusInternalServerError)
 		return
 	}
@@ -371,7 +370,7 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, SITE_URL, http.StatusTemporaryRedirect)
 }
 
-func generateExpiredCookie() *http.Cookie {
+func GenerateExpiredCookie() *http.Cookie {
 	return &http.Cookie{
 		Name:     SessionName,
 		Value:    "",
@@ -380,4 +379,27 @@ func generateExpiredCookie() *http.Cookie {
 		Path:     "/",
 		HttpOnly: true,
 	}
+}
+
+func DeleteSession(r *http.Request) error {
+	session, err := store.Get(r, SessionName)
+	if err != nil {
+		slog.Error("error getting session", "error", err)
+		return errors.New("unable to get session")
+	}
+
+	sessionID, ok := session.Values["sessionID"].(string)
+	if !ok {
+		slog.Error("unauthorized", "error", "sessionID not found in session")
+		return errors.New("unable to get session")
+	}
+
+	ctx := r.Context()
+	result := cache.Do(ctx, cache.B().Del().Key(sessionID).Build())
+	if result.Error() != nil {
+		slog.Error("failed to delete session from cache", "error", result.Error())
+		return errors.New("unable to delete session")
+	}
+
+	return nil
 }
